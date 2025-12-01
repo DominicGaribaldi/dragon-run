@@ -77,6 +77,13 @@ let abilityActivated = false; // Whether player has activated their ability for 
 // Audio system
 let audioManager = null;
 
+// Multiplayer system
+let networkManager = null;
+let multiplayerUI = null;
+let isMultiplayer = false;
+let isMyTurn = true; // In local mode, always true
+let serverBoardData = null; // Board data from server in multiplayer
+
 // ============================================================================
 // AUDIO MANAGER
 // ============================================================================
@@ -438,8 +445,8 @@ function create() {
     // Create character animations
     createCharacterAnimations.call(this);
 
-    // Start character selection process
-    startCharacterSelection.call(this);
+    // Show main menu (local vs online choice)
+    showMainMenu.call(this);
 }
 
 /**
@@ -846,6 +853,340 @@ function createCharacterAnimations() {
 function update() {
     // Currently no per-frame updates needed
     // Movement is handled through tweens and async functions
+}
+
+// ============================================================================
+// MAIN MENU & MULTIPLAYER
+// ============================================================================
+
+/**
+ * Show the main menu with Local/Online options
+ */
+function showMainMenu() {
+    console.log('[Game] Showing main menu...');
+
+    const scene = this;
+
+    // Initialize multiplayer systems
+    networkManager = new NetworkManager();
+    multiplayerUI = new MultiplayerUI(scene);
+    multiplayerUI.setNetworkManager(networkManager);
+
+    // Switch to character select music
+    if (audioManager) {
+        audioManager.playMusic('music_character_select');
+    }
+
+    // Reset camera
+    const camera = scene.cameras.main;
+    camera.scrollX = 0;
+    camera.scrollY = 0;
+    camera.setZoom(1);
+
+    // Get screen dimensions
+    const width = scene.scale.width;
+    const height = scene.scale.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Use title screen as background
+    if (scene.textures.exists('bg_title')) {
+        const texture = scene.textures.get('bg_title');
+        const frame = texture.getSourceImage();
+        const titleBg = scene.add.image(centerX, centerY, 'bg_title');
+        const scaleX = width / frame.width;
+        const scaleY = height / frame.height;
+        titleBg.setScale(Math.max(scaleX, scaleY));
+        titleBg.setDepth(99).setName('titleBackground').setScrollFactor(0);
+    }
+
+    // Semi-transparent overlay
+    const selectBg = scene.add.graphics();
+    selectBg.fillStyle(0x000000, 0.5);
+    selectBg.fillRect(0, 0, width, height);
+    selectBg.setDepth(100).setName('selectOverlay').setScrollFactor(0);
+
+    // Show main menu
+    multiplayerUI.showMainMenu((mode) => {
+        if (mode === 'local') {
+            // Local game - proceed with character selection
+            isMultiplayer = false;
+            isMyTurn = true;
+            startCharacterSelection.call(scene);
+        }
+        // Online mode is handled by MultiplayerUI
+    });
+
+    // Setup callback for when online game is ready
+    multiplayerUI.setOnGameReady((data) => {
+        console.log('[Game] Online game ready, starting...', data);
+        isMultiplayer = true;
+        serverBoardData = data.board;
+
+        // Setup network event handlers
+        setupNetworkHandlers.call(scene);
+
+        // Start the game with server data
+        startOnlineGame.call(scene, data);
+    });
+}
+
+/**
+ * Setup network event handlers for multiplayer
+ */
+function setupNetworkHandlers() {
+    const scene = this;
+
+    // Handle roll results from server
+    networkManager.on('rollResult', (data) => {
+        console.log('[Network] Roll result:', data);
+
+        if (data.playerNumber === networkManager.myPlayerNumber) {
+            // It's our roll - animate it
+            diceValue = data.roll;
+            animateDiceRoll.call(scene, data.roll, () => {
+                // After animation, tell server to process movement
+                networkManager.processMovement({});
+            });
+        } else {
+            // Other player's roll - just update display
+            diceValue = data.roll;
+            updateDiceDisplay(data.roll);
+        }
+    });
+
+    // Handle turn completion
+    networkManager.on('turnComplete', (data) => {
+        console.log('[Network] Turn complete:', data);
+
+        // Update all player states
+        data.playerStates.forEach((state, index) => {
+            if (players[index]) {
+                // Instantly move to new position (no animation for remote players)
+                players[index].currentTile = state.currentTile;
+                players[index].statusEffects = { ...state.statusEffects };
+                players[index].inventory.items = [...state.inventory];
+                players[index].hasWon = state.hasWon;
+
+                // Snap sprite to position
+                const tile = board.tiles[state.currentTile];
+                if (tile && players[index].sprite) {
+                    players[index].sprite.x = tile.x;
+                    players[index].sprite.y = tile.y - 20;
+                }
+            }
+        });
+
+        updatePlayerStatus();
+
+        if (data.gameEnded) {
+            // Game over
+            gameState = 'ended';
+            const winner = players.find(p => p.hasWon);
+            showGameOver.call(scene, winner);
+        } else {
+            // Next turn
+            currentPlayerIndex = data.currentPlayerIndex;
+            isMyTurn = (data.currentPlayerIndex + 1) === networkManager.myPlayerNumber;
+            gameState = 'waiting';
+            updateTurnDisplay.call(scene);
+        }
+    });
+
+    // Handle encounters
+    networkManager.on('encounterTriggered', (data) => {
+        console.log('[Network] Encounter triggered:', data);
+
+        if (data.playerNumber === networkManager.myPlayerNumber) {
+            // Show encounter modal for our turn
+            gameState = 'encounter';
+            gameUI.showEncounterModal(data.encounter, players[currentPlayerIndex], (result) => {
+                networkManager.encounterChoice(result);
+            });
+        }
+    });
+
+    // Handle game end
+    networkManager.on('gameEnded', (data) => {
+        console.log('[Network] Game ended:', data);
+        gameState = 'ended';
+        const winner = players.find(p => p.playerNumber === data.winner);
+        showGameOver.call(scene, winner);
+    });
+
+    // Handle errors
+    networkManager.on('error', (data) => {
+        console.error('[Network] Error:', data.message);
+        gameUI.showToast(data.message, 'danger');
+    });
+
+    // Handle disconnection
+    networkManager.on('disconnected', (data) => {
+        console.log('[Network] Disconnected:', data.reason);
+        gameUI.showToast('Disconnected from server', 'danger');
+    });
+}
+
+/**
+ * Start an online multiplayer game
+ */
+function startOnlineGame(data) {
+    const scene = this;
+
+    console.log('[Game] Starting online game with data:', data);
+
+    // Clear any existing multiplayer UI
+    if (multiplayerUI) {
+        multiplayerUI.clearElements();
+    }
+
+    // Store server board data for seeded generation
+    serverBoardData = data.board;
+
+    // Set number of players
+    numberOfPlayers = data.players.length;
+
+    // Map server players to character selections
+    playerCharacterSelections = data.players.map(p => {
+        return CharacterData.find(c => c.id === p.characterId);
+    });
+
+    // Set initial turn state
+    currentPlayerIndex = data.currentPlayerIndex || 0;
+    isMyTurn = (currentPlayerIndex + 1) === networkManager.myPlayerNumber;
+
+    // Apply server-provided board assignments for multiplayer sync
+    if (board && serverBoardData) {
+        board.applyServerAssignments(serverBoardData);
+    }
+
+    // Start the game (similar to finishCharacterSelection but for multiplayer)
+    finishCharacterSelection.call(scene);
+
+    // Update turn display for multiplayer
+    updateTurnDisplay.call(scene);
+}
+
+/**
+ * Update turn display for multiplayer
+ */
+function updateTurnDisplay() {
+    const currentPlayer = players[currentPlayerIndex];
+    if (turnText) {
+        turnText.setText(currentPlayer.name);
+    }
+
+    // Update instruction text
+    if (instructionText) {
+        if (isMyTurn) {
+            instructionText.setText('Click dice or SPACE\nto roll!');
+        } else {
+            instructionText.setText(`Waiting for\n${currentPlayer.name}...`);
+        }
+    }
+
+    // Highlight current player
+    players.forEach((p, i) => p.setActive(i === currentPlayerIndex));
+}
+
+/**
+ * Animate dice roll (used for both local and network)
+ */
+function animateDiceRoll(finalValue, onComplete) {
+    const scene = this;
+
+    // Play dice shake sound
+    if (audioManager) {
+        audioManager.playSFX('sfx_dice_shake');
+    }
+
+    // Phase 1: Initial throw - fast rotation and scale bounce
+    scene.tweens.add({
+        targets: diceContainer,
+        scaleX: 1.5,
+        scaleY: 1.5,
+        duration: 100,
+        ease: 'Power2.easeOut',
+        onComplete: () => {
+            scene.tweens.add({
+                targets: diceContainer,
+                scaleX: 1.3,
+                scaleY: 1.3,
+                duration: 80,
+                ease: 'Power2.easeIn'
+            });
+        }
+    });
+
+    // Phase 2: Tumbling rotation
+    scene.tweens.add({
+        targets: diceContainer,
+        angle: 360,
+        duration: 800,
+        ease: 'Power3.easeOut'
+    });
+
+    // Phase 3: Flash through frames
+    let flashCount = 0;
+    const totalFlashes = 12;
+    let currentDelay = 40;
+
+    const flashNextValue = () => {
+        const frameIndex = flashCount % 16;
+        if (diceContainer.diceSprite) {
+            diceContainer.diceSprite.setFrame(frameIndex);
+        } else if (diceContainer.valueText) {
+            const randomVal = Math.floor(Math.random() * 6) + 1;
+            diceContainer.valueText.setText(randomVal.toString());
+        }
+
+        flashCount++;
+
+        if (flashCount >= totalFlashes) {
+            scene.time.delayedCall(80, () => {
+                // Show final value
+                if (diceContainer.showValue) {
+                    diceContainer.showValue(finalValue);
+                } else if (diceContainer.valueText) {
+                    diceContainer.valueText.setText(finalValue.toString());
+                }
+
+                // Final bounce
+                scene.tweens.add({
+                    targets: diceContainer,
+                    scaleX: 1.45,
+                    scaleY: 1.45,
+                    duration: 80,
+                    yoyo: true,
+                    ease: 'Power2.easeOut',
+                    onComplete: () => {
+                        diceContainer.angle = 0;
+                        diceContainer.setScale(1.3);
+                        diceValue = finalValue;
+                        if (onComplete) onComplete();
+                    }
+                });
+            });
+        } else {
+            currentDelay = 40 + Math.pow(flashCount, 1.8) * 2;
+            scene.time.delayedCall(currentDelay, flashNextValue);
+        }
+    };
+
+    scene.time.delayedCall(50, flashNextValue);
+}
+
+/**
+ * Update dice display without animation (for observing other players' rolls)
+ */
+function updateDiceDisplay(value) {
+    if (diceContainer) {
+        if (diceContainer.showValue) {
+            diceContainer.showValue(value);
+        } else if (diceContainer.valueText) {
+            diceContainer.valueText.setText(value.toString());
+        }
+    }
 }
 
 // ============================================================================
@@ -1943,6 +2284,21 @@ async function handleRollDice() {
     if (gameState !== 'waiting') {
         console.log('[Game] Cannot roll - game is', gameState);
         return;
+    }
+
+    // In multiplayer, check if it's our turn
+    if (isMultiplayer && !isMyTurn) {
+        console.log('[Game] Cannot roll - not your turn');
+        gameUI.showToast("Wait for your turn!", 'warning');
+        return;
+    }
+
+    // In multiplayer, send roll request to server
+    if (isMultiplayer && networkManager && networkManager.isConnected()) {
+        gameState = 'rolling';
+        instructionText.setText('Rolling...');
+        networkManager.rollDice();
+        return; // Server will send back the result
     }
 
     const currentPlayer = players[currentPlayerIndex];

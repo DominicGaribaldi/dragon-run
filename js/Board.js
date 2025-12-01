@@ -240,6 +240,64 @@ class Board {
     }
 
     /**
+     * Apply server-provided board assignments for multiplayer sync
+     * This overwrites the local procedural assignments with server data
+     * @param {Object} serverAssignments - Assignments from server including seed
+     */
+    applyServerAssignments(serverAssignments) {
+        if (!serverAssignments) {
+            console.error('[Board] No server assignments provided');
+            return;
+        }
+
+        console.log('[Board] Applying server assignments:', serverAssignments);
+
+        // Convert server format to client format
+        this.proceduralAssignments = {
+            knights: {
+                hedge: serverAssignments.knights.hedge,
+                griffin: serverAssignments.knights.griffin,
+                champion: serverAssignments.knights.champion
+            },
+            dragons: {
+                slimetooth: serverAssignments.dragons.slimetooth,
+                frostfang: serverAssignments.dragons.frostfang,
+                ignis: serverAssignments.dragons.ignis
+            },
+            monsters: {
+                milkbaby: serverAssignments.monsters.find(m => m.type === 'milkbaby')?.tile,
+                taxgoblin: serverAssignments.monsters.find(m => m.type === 'taxgoblin')?.tile,
+                hillgiant: serverAssignments.monsters.find(m => m.type === 'hillgiant')?.tile,
+                mimic: serverAssignments.monsters.find(m => m.type === 'mimic')?.tile,
+                hypnotoad: serverAssignments.monsters.find(m => m.type === 'hypnotoad')?.tile,
+                vampires: serverAssignments.monsters.find(m => m.type === 'vampires')?.tile
+            },
+            special: {
+                chests: serverAssignments.specials.filter(s => s.type === 'chest').map(s => s.tile),
+                anvil: serverAssignments.specials.find(s => s.type === 'anvil')?.tile,
+                portalBalanced: serverAssignments.portals.find(p => p.type === 'balanced')?.tile,
+                portalRisky: serverAssignments.portals.find(p => p.type === 'risky')?.tile,
+                portalChaotic: serverAssignments.portals.find(p => p.type === 'chaotic')?.tile
+            }
+        };
+
+        // Update EncounterData with new positions
+        this.updateEncounterData();
+
+        console.log('[Board] Server assignments applied, proceduralAssignments:', this.proceduralAssignments);
+    }
+
+    /**
+     * Regenerate board using a seed (for multiplayer sync)
+     * @param {number} seed - The seed to use for random generation
+     */
+    regenerateWithSeed(seed) {
+        console.log('[Board] Regenerating with seed:', seed);
+        // For now, we use server-provided assignments directly
+        // This method exists for future seeded client-side generation if needed
+    }
+
+    /**
      * Update EncounterData with procedurally generated tile positions
      */
     updateEncounterData() {

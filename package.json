@@ -1,0 +1,37 @@
+{
+  "name": "dragon-run",
+  "version": "1.0.0",
+  "description": "Dragon Run: The Royal Race - A digital board game",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node upload-server.js",
+    "server": "node server/index.js",
+    "server:dev": "nodemon server/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run test && npm run test:e2e"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "jsdom": "^23.0.0",
+    "nodemon": "^3.0.1",
+    "vitest": "^1.0.0"
+  },
+  "keywords": ["game", "phaser", "board-game"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
