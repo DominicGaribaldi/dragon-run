@@ -1,0 +1,1529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Run - Audio Manager</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a0a0a 0%, #2d1810 50%, #1a0a0a 100%);
+            min-height: 100vh;
+            color: #e0d4c8;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            border: 2px solid #c9a227;
+        }
+
+        h1 {
+            color: #c9a227;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 1.1em;
+        }
+
+        .server-status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+
+        .server-status.online {
+            background: rgba(0, 200, 0, 0.2);
+            border: 1px solid #00c800;
+            color: #00ff00;
+        }
+
+        .server-status.offline {
+            background: rgba(200, 0, 0, 0.2);
+            border: 1px solid #c80000;
+            color: #ff4444;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid #555;
+            border-radius: 8px;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1em;
+        }
+
+        .tab:hover {
+            border-color: #888;
+            color: #ddd;
+        }
+
+        .tab.active {
+            background: rgba(201, 162, 39, 0.2);
+            border-color: #c9a227;
+            color: #c9a227;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .audio-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .audio-card {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #444;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .audio-card:hover {
+            border-color: #666;
+        }
+
+        .audio-card.uploaded {
+            border-color: #2a7a2a;
+            background: rgba(0, 50, 0, 0.3);
+        }
+
+        .audio-card h3 {
+            color: #c9a227;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .audio-card .description {
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .audio-card .filename {
+            color: #666;
+            font-size: 0.8em;
+            font-family: monospace;
+            margin-bottom: 10px;
+        }
+
+        .audio-card .format-info {
+            color: #6a9fb5;
+            font-size: 0.85em;
+            margin-bottom: 15px;
+            padding: 8px;
+            background: rgba(106, 159, 181, 0.1);
+            border-radius: 6px;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin: 15px 0;
+            height: 40px;
+        }
+
+        .audio-player audio {
+            width: 100%;
+        }
+
+        .upload-area {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .upload-area:hover {
+            border-color: #c9a227;
+            background: rgba(201, 162, 39, 0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: #c9a227;
+            background: rgba(201, 162, 39, 0.2);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-area .upload-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .upload-area .upload-text {
+            color: #888;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            margin-right: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-remove {
+            background: #8b0000;
+            color: white;
+        }
+
+        .btn-remove:hover {
+            background: #a00;
+        }
+
+        .btn-play {
+            background: #2a5a2a;
+            color: white;
+        }
+
+        .btn-play:hover {
+            background: #3a7a3a;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-bar .progress {
+            height: 100%;
+            background: #c9a227;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 15px 25px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            color: #c9a227;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .instructions {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .instructions h2 {
+            color: #c9a227;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            list-style-position: inside;
+            color: #aaa;
+        }
+
+        .instructions li {
+            margin: 8px 0;
+        }
+
+        .instructions code {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #6a9fb5;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .volume-control label {
+            color: #888;
+            font-size: 0.85em;
+        }
+
+        .volume-control input[type="range"] {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #333;
+            border-radius: 3px;
+        }
+
+        .volume-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #c9a227;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .loop-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .loop-toggle input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .loop-toggle label {
+            color: #888;
+            font-size: 0.85em;
+            cursor: pointer;
+        }
+
+        .btn-prompt {
+            background: #5a4a9a;
+            color: white;
+        }
+
+        .btn-prompt:hover {
+            background: #6a5aaa;
+        }
+
+        .prompt-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .prompt-modal.hidden {
+            display: none;
+        }
+
+        .prompt-content {
+            background: #1a1a2e;
+            border: 2px solid #c9a227;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .prompt-content h3 {
+            color: #c9a227;
+            margin-bottom: 10px;
+        }
+
+        .prompt-description {
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .prompt-text {
+            background: #0a0a15;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+            font-size: 0.95em;
+            line-height: 1.5;
+            color: #e0e0e0;
+        }
+
+        .prompt-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .prompt-buttons .btn {
+            flex: none;
+            padding: 12px 24px;
+        }
+
+        .btn-copy-prompt {
+            background: #c9a227;
+            color: #000;
+        }
+
+        .btn-copy-prompt:hover {
+            background: #d9b237;
+        }
+
+        .btn-close {
+            background: #444;
+            color: #fff;
+        }
+
+        .btn-close:hover {
+            background: #555;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #28a745;
+            color: #fff;
+            padding: 15px 25px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease;
+            z-index: 1001;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .audio-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dragon Run Audio Manager</h1>
+            <p class="subtitle">Manage music and sound effects for your game</p>
+            <div class="server-status offline" id="serverStatus">
+                Checking server...
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="totalCount">0</div>
+                <div class="stat-label">Total Audio Files</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="uploadedCount">0</div>
+                <div class="stat-label">Uploaded</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="remainingCount">0</div>
+                <div class="stat-label">Remaining</div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h2>Audio Requirements</h2>
+            <ul>
+                <li>Supported formats: <code>MP3</code>, <code>OGG</code>, <code>WAV</code>, <code>M4A</code></li>
+                <li>For best browser compatibility, upload <code>MP3</code> or <code>OGG</code> files</li>
+                <li>Music tracks should be loopable where indicated</li>
+                <li>Sound effects should be short and punchy (under 3 seconds for most)</li>
+                <li>Recommended: Normalize audio to -3dB to prevent clipping</li>
+            </ul>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="music">Music</button>
+            <button class="tab" data-tab="sfx-ui">UI Sounds</button>
+            <button class="tab" data-tab="sfx-gameplay">Gameplay</button>
+            <button class="tab" data-tab="sfx-encounters">Encounters</button>
+            <button class="tab" data-tab="sfx-characters">Characters</button>
+        </div>
+
+        <!-- Music Tab -->
+        <div class="tab-content active" id="tab-music">
+            <div class="audio-grid" id="grid-music"></div>
+        </div>
+
+        <!-- UI Sounds Tab -->
+        <div class="tab-content" id="tab-sfx-ui">
+            <div class="audio-grid" id="grid-sfx-ui"></div>
+        </div>
+
+        <!-- Gameplay Tab -->
+        <div class="tab-content" id="tab-sfx-gameplay">
+            <div class="audio-grid" id="grid-sfx-gameplay"></div>
+        </div>
+
+        <!-- Encounters Tab -->
+        <div class="tab-content" id="tab-sfx-encounters">
+            <div class="audio-grid" id="grid-sfx-encounters"></div>
+        </div>
+
+        <!-- Characters Tab -->
+        <div class="tab-content" id="tab-sfx-characters">
+            <div class="audio-grid" id="grid-sfx-characters"></div>
+        </div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div class="prompt-modal hidden" id="promptModal">
+        <div class="prompt-content">
+            <h3 id="promptTitle">AI Generation Prompt</h3>
+            <p class="prompt-description" id="promptDescription"></p>
+            <div class="prompt-text" id="promptText"></div>
+            <div class="prompt-buttons">
+                <button class="btn btn-copy-prompt" onclick="copyPrompt()">Copy to Clipboard</button>
+                <button class="btn btn-close" onclick="closePromptModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast hidden" id="toast"></div>
+
+    <script>
+        // Audio database - all required audio files with AI generation prompts
+        const audioDatabase = {
+            music: {
+                name: "Music",
+                assets: [
+                    {
+                        id: "music_title",
+                        name: "Title Screen Theme",
+                        filename: "music_title.mp3",
+                        description: "Epic, adventurous intro music. Sets the medieval fantasy mood.",
+                        format: "MP3/OGG, 1-2 min, loopable",
+                        loop: true,
+                        prompt: `Create an epic medieval fantasy title screen theme for a board game called "Dragon Run: The Royal Race".
+
+Style: Orchestral fantasy adventure, reminiscent of classic SNES/Genesis RPG title themes
+Mood: Heroic, adventurous, inviting, with a sense of grand adventure ahead
+Tempo: Medium (100-120 BPM)
+Duration: 1-2 minutes, seamlessly loopable
+
+Instrumentation:
+- Brass fanfare (trumpets, french horns) for heroic melody
+- Sweeping strings for warmth and epic feel
+- Harp arpeggios for fantasy atmosphere
+- Timpani/orchestral percussion for drama
+- Optional choir "ahh" pads for grandeur
+
+Structure: Intro fanfare → Main melodic theme → Build to climax → Soft resolution that loops back
+Reference: Think "Dragon Quest" or "Final Fantasy" title themes - triumphant but inviting`
+                    },
+                    {
+                        id: "music_character_select",
+                        name: "Character Select",
+                        filename: "music_character_select.mp3",
+                        description: "Upbeat, anticipatory music while choosing characters.",
+                        format: "MP3/OGG, 30-60 sec, loopable",
+                        loop: true,
+                        prompt: `Create upbeat character selection music for a fantasy board game.
+
+Style: Playful medieval/fantasy, slightly whimsical
+Mood: Anticipatory, fun, encouraging decision-making
+Tempo: Medium-fast (120-140 BPM)
+Duration: 30-60 seconds, seamlessly loopable
+
+Instrumentation:
+- Lute or mandolin carrying the melody
+- Light woodwinds (flute, recorder) for whimsy
+- Gentle hand percussion (tambourine, finger cymbals)
+- Pizzicato strings for playfulness
+- Optional light harpsichord
+
+Structure: Bouncy main theme that stays interesting but not distracting
+Feel: Like browsing a tavern notice board or a medieval market
+Reference: Think character select screens from Gauntlet or Castle Crashers`
+                    },
+                    {
+                        id: "music_gameplay",
+                        name: "Main Gameplay Theme",
+                        filename: "music_gameplay.mp3",
+                        description: "The primary game music. Light, fun, keeps energy up during play.",
+                        format: "MP3/OGG, 2-3 min, loopable",
+                        loop: true,
+                        prompt: `Create the main gameplay theme for "Dragon Run" - a fantasy board game race.
+
+Style: Medieval adventure, energetic but not overwhelming
+Mood: Fun, competitive, adventurous - keeps players engaged during turns
+Tempo: Medium (110-130 BPM)
+Duration: 2-3 minutes, seamlessly loopable
+
+Instrumentation:
+- Strings (violin, viola) carrying main melody
+- Acoustic guitar or lute for rhythm
+- Light brass accents (horn calls)
+- Hand drums and light percussion
+- Occasional flute flourishes
+- Bass notes for grounding
+
+Structure: A-B-A-C-A pattern, with the theme returning but variations keeping it fresh
+Key requirement: Must work as background - engaging but not fatiguing after many loops
+Reference: Think "Trine" game soundtrack or tavern music from fantasy RPGs`
+                    },
+                    {
+                        id: "music_tension",
+                        name: "Tension/Dragon Nearby",
+                        filename: "music_tension.mp3",
+                        description: "Suspenseful music when approaching dragon tiles.",
+                        format: "MP3/OGG, 30-60 sec, loopable",
+                        loop: true,
+                        prompt: `Create suspenseful music for when players approach dragon encounters in a fantasy board game.
+
+Style: Dark fantasy, ominous
+Mood: Tension, danger approaching, dramatic suspense
+Tempo: Slow to medium (80-100 BPM)
+Duration: 30-60 seconds, seamlessly loopable
+
+Instrumentation:
+- Low strings tremolo for tension
+- Deep brass (tuba, trombone) for menace
+- Timpani rumbles
+- Dissonant choir pads
+- Subtle dragon-like growling bass
+- Sparse, ominous percussion hits
+
+Structure: Building tension that sustains without resolution
+Sound design: Include subtle dragon breathing or distant roars mixed low
+Reference: Think approaching a boss room in Dark Souls or Skyrim dragon music`
+                    },
+                    {
+                        id: "music_victory",
+                        name: "Victory Fanfare",
+                        filename: "music_victory.mp3",
+                        description: "Triumphant celebration when a player wins!",
+                        format: "MP3/OGG, 10-20 sec",
+                        loop: false,
+                        prompt: `Create a triumphant victory fanfare for winning "Dragon Run" board game race.
+
+Style: Heroic orchestral celebration
+Mood: Triumphant, celebratory, glorious achievement
+Tempo: Start slow, build to fast (80 → 140 BPM)
+Duration: 10-20 seconds, one-shot (no loop needed)
+
+Instrumentation:
+- Bold brass fanfare (trumpets leading)
+- Sweeping strings crescendo
+- Cymbal crashes and timpani hits
+- Triumphant French horns
+- Optional celebratory bells/chimes
+- Final dramatic chord resolution
+
+Structure: Short dramatic pause → Brass fanfare → Strings swell → Grand finale chord
+Feel: The moment of glory - crossing the finish line as champion!
+Reference: Final Fantasy victory theme, Zelda treasure fanfare, but grander`
+                    },
+                    {
+                        id: "music_encounter",
+                        name: "Encounter Theme",
+                        filename: "music_encounter.mp3",
+                        description: "Mysterious/exciting music during monster encounters.",
+                        format: "MP3/OGG, 20-40 sec, loopable",
+                        loop: true,
+                        prompt: `Create encounter/battle music for monster confrontations in a fantasy board game.
+
+Style: Action-fantasy with a dice-roll gambling feel
+Mood: Exciting, uncertain, dramatic - it's a chance encounter!
+Tempo: Medium-fast (130-150 BPM)
+Duration: 20-40 seconds, seamlessly loopable
+
+Instrumentation:
+- Driving strings (violin runs, cello ostinato)
+- Brass stabs for drama
+- Energetic hand percussion
+- Tension-building snare rolls
+- Dramatic woodwind accents
+- Bass pulse for urgency
+
+Structure: Looping tension that works for dice rolls and encounter resolution
+Feel: "Will I succeed?" - the tension of facing a monster and rolling dice
+Reference: Think mini-boss encounter music, or combat themes from tactical RPGs`
+                    }
+                ]
+            },
+            "sfx-ui": {
+                name: "UI Sounds",
+                assets: [
+                    {
+                        id: "sfx_button_hover",
+                        name: "Button Hover",
+                        filename: "sfx_button_hover.mp3",
+                        description: "Subtle hover sound for menu buttons.",
+                        format: "Short, < 0.2 sec",
+                        prompt: `Create a subtle button hover sound effect for a fantasy game UI.
+
+Sound: Soft, magical sparkle or gentle "tick"
+Style: Medieval fantasy - like touching an enchanted scroll
+Duration: Under 0.2 seconds
+Character: Subtle, non-intrusive, slightly magical
+
+Elements: Tiny bell-like chime, soft sparkle, or gentle wooden click
+Feel: Acknowledging the hover without being annoying on repeated plays
+Reference: Think soft UI sounds from Diablo or Hearthstone`
+                    },
+                    {
+                        id: "sfx_button_click",
+                        name: "Button Click",
+                        filename: "sfx_button_click.mp3",
+                        description: "Satisfying click for button presses.",
+                        format: "Short, < 0.3 sec",
+                        prompt: `Create a satisfying button click sound for a fantasy game UI.
+
+Sound: Decisive click with slight medieval character
+Style: Fantasy interface - like pressing a stone button or closing a chest latch
+Duration: Under 0.3 seconds
+Character: Satisfying, confirms the action, slightly weighty
+
+Elements: Mechanical click, subtle stone/metal impact, tiny reverb tail
+Feel: "Yes, that worked" - clear feedback for button presses
+Reference: Hearthstone card placement, World of Warcraft UI clicks`
+                    },
+                    {
+                        id: "sfx_menu_open",
+                        name: "Menu Open",
+                        filename: "sfx_menu_open.mp3",
+                        description: "Whoosh/slide sound when panels open.",
+                        format: "< 0.5 sec",
+                        prompt: `Create a menu/panel opening sound for a fantasy game.
+
+Sound: Magical whoosh with parchment unfurling quality
+Style: Fantasy UI - like a scroll unfurling or magical portal opening
+Duration: Under 0.5 seconds
+Character: Smooth, welcoming, slightly magical
+
+Elements: Soft whoosh, parchment rustle, subtle sparkle at the end
+Feel: "Something important is appearing" - draws attention positively
+Reference: RPG inventory opening sounds, magical book opening`
+                    },
+                    {
+                        id: "sfx_menu_close",
+                        name: "Menu Close",
+                        filename: "sfx_menu_close.mp3",
+                        description: "Reverse whoosh when panels close.",
+                        format: "< 0.5 sec",
+                        prompt: `Create a menu/panel closing sound for a fantasy game.
+
+Sound: Reversed whoosh with scroll rolling quality
+Style: Fantasy UI - like a scroll rolling up or portal closing
+Duration: Under 0.5 seconds
+Character: Smooth, final, satisfying closure
+
+Elements: Reverse whoosh, subtle parchment roll, soft thump at end
+Feel: "Done with that" - clean dismissal of the panel
+Reference: Reverse of menu open sound, inventory closing in RPGs`
+                    },
+                    {
+                        id: "sfx_character_select",
+                        name: "Character Selected",
+                        filename: "sfx_character_select.mp3",
+                        description: "Confirmation sound when picking a character.",
+                        format: "< 1 sec",
+                        prompt: `Create a character selection confirmation sound for a fantasy game.
+
+Sound: Heroic confirmation with magical flourish
+Style: Fantasy adventure - like choosing your champion
+Duration: Under 1 second
+Character: Triumphant mini-fanfare, confirms an important choice
+
+Elements: Quick brass sting, sparkle effect, decisive chord
+Feel: "This hero is ready!" - excitement for the choice made
+Reference: Character lock-in sounds from fighting games, hero selection in MOBAs`
+                    },
+                    {
+                        id: "sfx_turn_start",
+                        name: "Turn Start",
+                        filename: "sfx_turn_start.mp3",
+                        description: "Notification that it's your turn.",
+                        format: "< 1 sec",
+                        prompt: `Create a "your turn" notification sound for a fantasy board game.
+
+Sound: Attention-getting chime that says "it's go time"
+Style: Medieval herald announcement, but brief
+Duration: Under 1 second
+Character: Alerting, exciting, encourages action
+
+Elements: Quick trumpet call or horn, magical chime, rising tone
+Feel: "Your moment has arrived!" - energizing call to action
+Reference: Turn notification in Hearthstone or chess apps`
+                    },
+                    {
+                        id: "sfx_notification",
+                        name: "General Notification",
+                        filename: "sfx_notification.mp3",
+                        description: "Generic notification chime.",
+                        format: "< 0.5 sec",
+                        prompt: `Create a general notification sound for a fantasy game.
+
+Sound: Pleasant chime that draws attention without alarming
+Style: Magical bell or crystal chime
+Duration: Under 0.5 seconds
+Character: Informative, neutral, pleasant
+
+Elements: Single bell tone, subtle sparkle, quick decay
+Feel: "Something to note" - draws attention to information
+Reference: Quest update sounds, achievement unlocks in RPGs`
+                    }
+                ]
+            },
+            "sfx-gameplay": {
+                name: "Gameplay",
+                assets: [
+                    {
+                        id: "sfx_dice_shake",
+                        name: "Dice Shake",
+                        filename: "sfx_dice_shake.mp3",
+                        description: "Rattling dice sound while rolling.",
+                        format: "1-2 sec, can loop",
+                        prompt: `Create a dice shaking/rattling sound effect.
+
+Sound: Multiple dice being shaken in a cup or hands
+Style: Realistic with slight fantasy polish
+Duration: 1-2 seconds, should loop seamlessly
+Character: Building anticipation, exciting
+
+Elements: Wooden or bone dice rattling, cupped hands sound, rhythmic shaking
+Feel: "What will I roll?" - tension and excitement building
+Reference: Casino dice sounds, tabletop gaming dice cups`
+                    },
+                    {
+                        id: "sfx_dice_roll",
+                        name: "Dice Land",
+                        filename: "sfx_dice_roll.mp3",
+                        description: "Dice landing/settling sound.",
+                        format: "< 1 sec",
+                        prompt: `Create a dice landing sound effect.
+
+Sound: Dice bouncing and settling on a wooden table
+Style: Satisfying conclusion to the roll
+Duration: Under 1 second
+Character: Decisive, final, "the result is in"
+
+Elements: Initial impact, a couple bounces, final settle
+Feel: "There it is!" - the moment of truth revealed
+Reference: Board game dice landing, tabletop RPG dice sounds`
+                    },
+                    {
+                        id: "sfx_move_step",
+                        name: "Movement Step",
+                        filename: "sfx_move_step.mp3",
+                        description: "Footstep/hop sound for each tile moved.",
+                        format: "Very short, < 0.2 sec",
+                        prompt: `Create a game piece movement step sound.
+
+Sound: Light hop or step on stone/wood
+Style: Fantasy board game token moving
+Duration: Under 0.2 seconds
+Character: Light, bouncy, satisfying
+
+Elements: Soft impact, slight wooden resonance, quick decay
+Feel: Token hopping from tile to tile cheerfully
+Reference: Board game piece movement, chess piece placement`
+                    },
+                    {
+                        id: "sfx_move_complete",
+                        name: "Movement Complete",
+                        filename: "sfx_move_complete.mp3",
+                        description: "Sound when token lands on final tile.",
+                        format: "< 0.5 sec",
+                        prompt: `Create a "landing on tile" completion sound.
+
+Sound: Satisfying arrival thump with slight magical sparkle
+Style: Fantasy - token settling into place
+Duration: Under 0.5 seconds
+Character: Final, complete, "you've arrived"
+
+Elements: Solid thump, subtle magical shimmer, sense of arrival
+Feel: "Journey complete" - you've reached your destination
+Reference: Hearthstone minion placement, chess piece final placement`
+                    },
+                    {
+                        id: "sfx_knight_boost",
+                        name: "Knight Boost",
+                        filename: "sfx_knight_boost.mp3",
+                        description: "Heroic whoosh when knight carries you up!",
+                        format: "1-2 sec",
+                        prompt: `Create a "knight lifting you up" boost sound effect.
+
+Sound: Heroic rising whoosh with triumphant flourish
+Style: Fantasy adventure - being carried to victory
+Duration: 1-2 seconds
+Character: Heroic, ascending, helpful, triumphant
+
+Elements: Rising whoosh, horse whinny hint, brass fanfare accent, magical shimmer
+Feel: "To glory!" - a friendly knight carrying you upward
+Reference: Zelda item get sound, power-up collection sounds`
+                    },
+                    {
+                        id: "sfx_dragon_slide",
+                        name: "Dragon Slide",
+                        filename: "sfx_dragon_slide.mp3",
+                        description: "Sliding/falling sound when dragon sends you back.",
+                        format: "1-2 sec",
+                        prompt: `Create a "sliding down dragon" setback sound effect.
+
+Sound: Descending whoosh with slight comedic defeat
+Style: Fantasy - sliding down a dragon's back
+Duration: 1-2 seconds
+Character: Descending, deflating, "oh no!" but not too sad
+
+Elements: Descending whistle/whoosh, scales scraping, comedic "boing" at bottom
+Feel: "Wheee-oops!" - setback but in a fun game way
+Reference: Cartoon falling sounds, slide whistle descending`
+                    },
+                    {
+                        id: "sfx_treasure_open",
+                        name: "Treasure Chest Open",
+                        filename: "sfx_treasure_open.mp3",
+                        description: "Magical chest opening sound.",
+                        format: "1-2 sec",
+                        prompt: `Create a treasure chest opening sound effect.
+
+Sound: Creaky lid opening with magical reveal sparkle
+Style: Classic fantasy treasure discovery
+Duration: 1-2 seconds
+Character: Exciting, rewarding, magical discovery
+
+Elements: Wood/metal creak, lid thump open, magical sparkle/shimmer, golden glow sound
+Feel: "Jackpot!" - the excitement of finding treasure
+Reference: Zelda treasure chest, RPG loot sounds`
+                    },
+                    {
+                        id: "sfx_item_get",
+                        name: "Item Obtained",
+                        filename: "sfx_item_get.mp3",
+                        description: "Satisfying sound when getting an item.",
+                        format: "< 1 sec",
+                        prompt: `Create an "item obtained" sound effect.
+
+Sound: Quick magical collection chime
+Style: Fantasy RPG item pickup
+Duration: Under 1 second
+Character: Satisfying, rewarding, "got it!"
+
+Elements: Quick ascending chime, sparkle effect, slight magical ding
+Feel: "Added to inventory!" - successful collection
+Reference: Zelda item pickup, RPG loot collection sounds`
+                    },
+                    {
+                        id: "sfx_item_use",
+                        name: "Item Used",
+                        filename: "sfx_item_use.mp3",
+                        description: "Sound when using an inventory item.",
+                        format: "< 1 sec",
+                        prompt: `Create an "item used" activation sound effect.
+
+Sound: Magical activation with consumption feel
+Style: Fantasy potion/scroll use
+Duration: Under 1 second
+Character: Magical, effective, "power activated"
+
+Elements: Magical activation pulse, subtle glass break or paper burn, energy release
+Feel: "Using my power!" - item activates and is consumed
+Reference: Potion drinking sounds, spell scroll activation`
+                    },
+                    {
+                        id: "sfx_portal_teleport",
+                        name: "Portal Teleport",
+                        filename: "sfx_portal_teleport.mp3",
+                        description: "Magical whoosh for twin portals.",
+                        format: "1-2 sec",
+                        prompt: `Create a portal teleportation sound effect.
+
+Sound: Magical dimensional travel whoosh
+Style: Fantasy portal - reality bending
+Duration: 1-2 seconds
+Character: Mysterious, magical, disorienting but exciting
+
+Elements: Building energy, dimensional pop/whoosh, arrival shimmer, slight echo
+Feel: "Where will I end up?" - mysterious magical travel
+Reference: Portal game sounds, magical teleportation in fantasy games`
+                    },
+                    {
+                        id: "sfx_anvil_repair",
+                        name: "Anvil Repair",
+                        filename: "sfx_anvil_repair.mp3",
+                        description: "Metallic clanging for armor repair.",
+                        format: "1-2 sec",
+                        prompt: `Create a blacksmith anvil armor repair sound.
+
+Sound: Rhythmic hammer on anvil with magical enhancement
+Style: Fantasy blacksmith at work
+Duration: 1-2 seconds
+Character: Industrious, strengthening, improvement
+
+Elements: 2-3 hammer strikes on metal, sparks sound, magical enhancement shimmer
+Feel: "Getting stronger!" - armor being forged/repaired
+Reference: Blacksmith sounds, crafting sounds in RPGs`
+                    },
+                    {
+                        id: "sfx_armor_break",
+                        name: "Armor Break",
+                        filename: "sfx_armor_break.mp3",
+                        description: "Shattering sound when armor is used.",
+                        format: "< 1 sec",
+                        prompt: `Create an armor shard breaking sound effect.
+
+Sound: Magical shield shattering to protect you
+Style: Fantasy - protective magic being consumed
+Duration: Under 1 second
+Character: Protective, sacrificial, "it saved me!"
+
+Elements: Crystal/glass shatter, magical dissipation, protective shimmer
+Feel: "The armor took the hit!" - grateful for protection
+Reference: Shield break sounds, defensive magic consumption`
+                    },
+                    {
+                        id: "sfx_win",
+                        name: "Player Wins",
+                        filename: "sfx_win.mp3",
+                        description: "Celebratory fanfare when reaching the finish!",
+                        format: "2-3 sec",
+                        prompt: `Create a race victory celebration sound effect.
+
+Sound: Triumphant fanfare with cheering
+Style: Medieval fantasy victory celebration
+Duration: 2-3 seconds
+Character: Triumphant, celebratory, glorious
+
+Elements: Brass fanfare, crowd cheering, confetti/sparkle sounds, triumphant chord
+Feel: "I WON!" - pure victory celebration
+Reference: Mario Kart victory, sports game winning sounds`
+                    }
+                ]
+            },
+            "sfx-encounters": {
+                name: "Encounters",
+                assets: [
+                    {
+                        id: "sfx_encounter_start",
+                        name: "Encounter Start",
+                        filename: "sfx_encounter_start.mp3",
+                        description: "Dramatic sting when encounter begins.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_encounter_success",
+                        name: "Encounter Success",
+                        filename: "sfx_encounter_success.mp3",
+                        description: "Triumphant sound for passing encounter.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_encounter_fail",
+                        name: "Encounter Fail",
+                        filename: "sfx_encounter_fail.mp3",
+                        description: "Sad trombone or fail sound.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_dragon_roar",
+                        name: "Dragon Roar",
+                        filename: "sfx_dragon_roar.mp3",
+                        description: "Fearsome dragon roar!",
+                        format: "1-2 sec"
+                    },
+                    {
+                        id: "sfx_dragon_fire",
+                        name: "Dragon Fire Breath",
+                        filename: "sfx_dragon_fire.mp3",
+                        description: "Fire breathing sound for Ignis.",
+                        format: "1-2 sec"
+                    },
+                    {
+                        id: "sfx_dragon_ice",
+                        name: "Dragon Ice Breath",
+                        filename: "sfx_dragon_ice.mp3",
+                        description: "Icy freezing sound for Frost-Fang.",
+                        format: "1-2 sec"
+                    },
+                    {
+                        id: "sfx_dragon_poison",
+                        name: "Dragon Poison",
+                        filename: "sfx_dragon_poison.mp3",
+                        description: "Bubbling acid sound for Slime-Tooth.",
+                        format: "1-2 sec"
+                    },
+                    {
+                        id: "sfx_monster_growl",
+                        name: "Monster Growl",
+                        filename: "sfx_monster_growl.mp3",
+                        description: "Generic monster sound.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_goblin_laugh",
+                        name: "Goblin Laugh",
+                        filename: "sfx_goblin_laugh.mp3",
+                        description: "Mischievous goblin chuckle.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_giant_stomp",
+                        name: "Giant Stomp",
+                        filename: "sfx_giant_stomp.mp3",
+                        description: "Heavy footstep for Hill-Giant.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_vampire_hiss",
+                        name: "Vampire Hiss",
+                        filename: "sfx_vampire_hiss.mp3",
+                        description: "Creepy vampire sound.",
+                        format: "< 1 sec"
+                    },
+                    {
+                        id: "sfx_hypno_spiral",
+                        name: "Hypno-Toad Effect",
+                        filename: "sfx_hypno_spiral.mp3",
+                        description: "Hypnotic swirling sound.",
+                        format: "1-2 sec"
+                    },
+                    {
+                        id: "sfx_mimic_chomp",
+                        name: "Mimic Bite",
+                        filename: "sfx_mimic_chomp.mp3",
+                        description: "Chomping bite sound.",
+                        format: "< 1 sec"
+                    }
+                ]
+            },
+            "sfx-characters": {
+                name: "Characters",
+                assets: [
+                    {
+                        id: "sfx_char_reginald",
+                        name: "Reginald Voice",
+                        filename: "sfx_char_reginald.mp3",
+                        description: "Regal/noble voice clip or sound.",
+                        format: "< 2 sec"
+                    },
+                    {
+                        id: "sfx_char_elara",
+                        name: "Elara Voice",
+                        filename: "sfx_char_elara.mp3",
+                        description: "Wise/magical voice clip.",
+                        format: "< 2 sec"
+                    },
+                    {
+                        id: "sfx_char_kaelen",
+                        name: "Kaelen Voice",
+                        filename: "sfx_char_kaelen.mp3",
+                        description: "Sneaky/roguish voice clip.",
+                        format: "< 2 sec"
+                    },
+                    {
+                        id: "sfx_char_aurelia",
+                        name: "Aurelia Voice",
+                        filename: "sfx_char_aurelia.mp3",
+                        description: "Holy/righteous voice clip.",
+                        format: "< 2 sec"
+                    },
+                    {
+                        id: "sfx_char_grizelda",
+                        name: "Grizelda Voice",
+                        filename: "sfx_char_grizelda.mp3",
+                        description: "Gruff/tough voice clip.",
+                        format: "< 2 sec"
+                    },
+                    {
+                        id: "sfx_char_pippin",
+                        name: "Pippin Voice",
+                        filename: "sfx_char_pippin.mp3",
+                        description: "Cheerful/musical voice clip.",
+                        format: "< 2 sec"
+                    }
+                ]
+            }
+        };
+
+        // Track uploaded files
+        const uploadedAudio = {};
+
+        // Server URL
+        const UPLOAD_SERVER = 'http://localhost:3002';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkServerStatus();
+            loadUploadedStatus();
+            renderAllGrids();
+            setupTabs();
+            updateStats();
+        });
+
+        // Check if upload server is running
+        async function checkServerStatus() {
+            const statusEl = document.getElementById('serverStatus');
+            try {
+                const response = await fetch(`${UPLOAD_SERVER}/status`);
+                if (response.ok) {
+                    const data = await response.json();
+                    statusEl.textContent = `Server Online (Port ${data.port})`;
+                    statusEl.className = 'server-status online';
+                } else {
+                    throw new Error('Server error');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Server Offline - Run: node upload-server.js';
+                statusEl.className = 'server-status offline';
+            }
+        }
+
+        // Load uploaded status from localStorage
+        function loadUploadedStatus() {
+            const saved = localStorage.getItem('dragonrun_audio_uploaded');
+            if (saved) {
+                Object.assign(uploadedAudio, JSON.parse(saved));
+            }
+        }
+
+        // Save uploaded status
+        function saveUploadedStatus() {
+            localStorage.setItem('dragonrun_audio_uploaded', JSON.stringify(uploadedAudio));
+        }
+
+        // Update statistics
+        function updateStats() {
+            let total = 0;
+            let uploaded = 0;
+
+            for (const category of Object.values(audioDatabase)) {
+                for (const asset of category.assets) {
+                    total++;
+                    if (uploadedAudio[asset.id]) {
+                        uploaded++;
+                    }
+                }
+            }
+
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('uploadedCount').textContent = uploaded;
+            document.getElementById('remainingCount').textContent = total - uploaded;
+        }
+
+        // Setup tab switching
+        function setupTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active from all tabs and contents
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                    // Activate clicked tab
+                    tab.classList.add('active');
+                    document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+                });
+            });
+        }
+
+        // Render all grids
+        function renderAllGrids() {
+            for (const [categoryId, category] of Object.entries(audioDatabase)) {
+                renderGrid(categoryId, category);
+            }
+        }
+
+        // Render a category grid
+        function renderGrid(categoryId, category) {
+            const grid = document.getElementById(`grid-${categoryId}`);
+            if (!grid) return;
+
+            grid.innerHTML = '';
+
+            for (const asset of category.assets) {
+                const card = createAudioCard(asset);
+                grid.appendChild(card);
+            }
+        }
+
+        // Create audio card element
+        function createAudioCard(asset) {
+            const card = document.createElement('div');
+            card.className = `audio-card ${uploadedAudio[asset.id] ? 'uploaded' : ''}`;
+            card.id = `card-${asset.id}`;
+
+            const isUploaded = uploadedAudio[asset.id];
+            const audioPath = `assets/audio/${asset.filename}`;
+
+            card.innerHTML = `
+                <h3>${asset.name}</h3>
+                <p class="description">${asset.description}</p>
+                <p class="filename">${asset.filename}</p>
+                <p class="format-info">${asset.format}</p>
+
+                ${isUploaded ? `
+                    <div class="audio-player">
+                        <audio controls id="audio-${asset.id}">
+                            <source src="${audioPath}" type="audio/mpeg">
+                            Your browser does not support audio.
+                        </audio>
+                    </div>
+                    <div class="volume-control">
+                        <label>Volume:</label>
+                        <input type="range" min="0" max="100" value="80"
+                               onchange="setVolume('${asset.id}', this.value)">
+                    </div>
+                    ${asset.loop ? `
+                        <div class="loop-toggle">
+                            <input type="checkbox" id="loop-${asset.id}"
+                                   onchange="toggleLoop('${asset.id}', this.checked)" checked>
+                            <label for="loop-${asset.id}">Loop playback</label>
+                        </div>
+                    ` : ''}
+                    <button class="btn btn-remove" onclick="removeAudio('${asset.id}', '${asset.filename}')">
+                        Remove
+                    </button>
+                ` : `
+                    <div class="upload-area" id="upload-${asset.id}"
+                         ondrop="handleDrop(event, '${asset.id}', '${asset.filename}')"
+                         ondragover="handleDragOver(event)"
+                         ondragleave="handleDragLeave(event)"
+                         onclick="document.getElementById('file-${asset.id}').click()">
+                        <input type="file" id="file-${asset.id}" accept="audio/*"
+                               onchange="handleFileSelect(event, '${asset.id}', '${asset.filename}')">
+                        <div class="upload-icon">🎵</div>
+                        <div class="upload-text">Drop audio file here or click to upload</div>
+                    </div>
+                    <div class="progress-bar" id="progress-${asset.id}">
+                        <div class="progress"></div>
+                    </div>
+                `}
+            `;
+
+            return card;
+        }
+
+        // Handle drag over
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('dragover');
+        }
+
+        // Handle drag leave
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('dragover');
+        }
+
+        // Handle file drop
+        function handleDrop(event, assetId, filename) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('dragover');
+
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0], assetId, filename);
+            }
+        }
+
+        // Handle file selection
+        function handleFileSelect(event, assetId, filename) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                uploadFile(files[0], assetId, filename);
+            }
+        }
+
+        // Upload file to server
+        async function uploadFile(file, assetId, filename) {
+            const progressBar = document.getElementById(`progress-${assetId}`);
+            const progressFill = progressBar.querySelector('.progress');
+            progressBar.classList.add('active');
+
+            // Determine the correct extension based on uploaded file
+            const ext = file.name.split('.').pop().toLowerCase();
+            const finalFilename = filename.replace(/\.[^.]+$/, `.${ext}`);
+
+            const formData = new FormData();
+            formData.append('file', file, finalFilename);
+            formData.append('assetId', assetId);
+            formData.append('filename', finalFilename);
+
+            try {
+                progressFill.style.width = '50%';
+
+                const response = await fetch(`${UPLOAD_SERVER}/upload-audio`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+
+                const result = await response.json();
+                progressFill.style.width = '100%';
+
+                // Mark as uploaded
+                uploadedAudio[assetId] = {
+                    filename: finalFilename,
+                    uploadedAt: new Date().toISOString()
+                };
+                saveUploadedStatus();
+
+                // Re-render the card
+                setTimeout(() => {
+                    const category = findAssetCategory(assetId);
+                    if (category) {
+                        renderGrid(category.id, category.data);
+                    }
+                    updateStats();
+                }, 300);
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert(`Upload failed: ${error.message}\n\nMake sure the upload server is running:\nnode upload-server.js`);
+                progressBar.classList.remove('active');
+                progressFill.style.width = '0%';
+            }
+        }
+
+        // Find which category an asset belongs to
+        function findAssetCategory(assetId) {
+            for (const [id, data] of Object.entries(audioDatabase)) {
+                for (const asset of data.assets) {
+                    if (asset.id === assetId) {
+                        return { id, data };
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Remove uploaded audio
+        async function removeAudio(assetId, filename) {
+            if (!confirm(`Remove ${filename}?`)) return;
+
+            try {
+                const response = await fetch(`${UPLOAD_SERVER}/delete-audio`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assetId, filename })
+                });
+
+                // Remove from tracking regardless of server response
+                delete uploadedAudio[assetId];
+                saveUploadedStatus();
+
+                // Re-render
+                const category = findAssetCategory(assetId);
+                if (category) {
+                    renderGrid(category.id, category.data);
+                }
+                updateStats();
+
+            } catch (error) {
+                console.error('Delete error:', error);
+                // Still remove from local tracking
+                delete uploadedAudio[assetId];
+                saveUploadedStatus();
+                const category = findAssetCategory(assetId);
+                if (category) {
+                    renderGrid(category.id, category.data);
+                }
+                updateStats();
+            }
+        }
+
+        // Set audio volume
+        function setVolume(assetId, value) {
+            const audio = document.getElementById(`audio-${assetId}`);
+            if (audio) {
+                audio.volume = value / 100;
+            }
+        }
+
+        // Toggle loop
+        function toggleLoop(assetId, checked) {
+            const audio = document.getElementById(`audio-${assetId}`);
+            if (audio) {
+                audio.loop = checked;
+            }
+        }
+    </script>
+</body>
+</html>

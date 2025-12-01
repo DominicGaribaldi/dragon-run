@@ -1,0 +1,1855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Run - Asset Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 2px solid #c9a227;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            color: #c9a227;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #888;
+        }
+
+        #serverStatus {
+            margin-top: 10px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            font-size: 14px;
+        }
+
+        #serverStatus.online {
+            background: rgba(0, 200, 0, 0.2);
+            border: 1px solid #00c800;
+            color: #00ff00;
+        }
+
+        #serverStatus.offline {
+            background: rgba(200, 0, 0, 0.2);
+            border: 1px solid #c80000;
+            color: #ff4444;
+        }
+
+        .progress-bar-container {
+            background: #0a0a15;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #333;
+        }
+
+        .progress-bar-container h2 {
+            color: #c9a227;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .progress-bar {
+            background: #1a1a2e;
+            border-radius: 20px;
+            height: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #c9a227, #ffd700);
+            height: 100%;
+            border-radius: 20px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 10px 20px;
+            background: #1a1a2e;
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #c9a227;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        /* Main Tabs (Images/Audio) */
+        .main-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .main-tab {
+            padding: 15px 30px;
+            background: #1a1a2e;
+            border: 2px solid #333;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+
+        .main-tab:hover {
+            background: #2a2a3e;
+            border-color: #555;
+        }
+
+        .main-tab.active {
+            background: #c9a227;
+            color: #000;
+            border-color: #c9a227;
+        }
+
+        .main-tab .count {
+            font-size: 0.8em;
+            margin-left: 8px;
+            padding: 2px 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+
+        .main-tab.active .count {
+            background: rgba(0,0,0,0.2);
+        }
+
+        .main-content {
+            display: none;
+            background: #0a0a15;
+            border: 2px solid #333;
+            border-radius: 0 8px 8px 8px;
+            padding: 20px;
+        }
+
+        .main-content.active {
+            display: block;
+        }
+
+        /* Category Tabs */
+        .category-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .tab:hover {
+            background: #2a2a3e;
+            border-color: #c9a227;
+        }
+
+        .tab.active {
+            background: #c9a227;
+            color: #000;
+            border-color: #c9a227;
+        }
+
+        .tab .badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #28a745;
+            color: #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tab .badge.incomplete {
+            background: #dc3545;
+        }
+
+        .asset-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .asset-card {
+            background: #0f0f1a;
+            border: 2px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .asset-card:hover {
+            border-color: #c9a227;
+            transform: translateY(-2px);
+        }
+
+        .asset-card.uploaded {
+            border-color: #28a745;
+        }
+
+        .asset-preview {
+            height: 150px;
+            background: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .asset-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .asset-preview .placeholder {
+            color: #444;
+            font-size: 3em;
+        }
+
+        .asset-preview .checkmark {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #28a745;
+            color: #fff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .asset-info {
+            padding: 15px;
+        }
+
+        .asset-name {
+            font-weight: bold;
+            color: #c9a227;
+            margin-bottom: 5px;
+        }
+
+        .asset-filename {
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .asset-dimensions {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .asset-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            min-width: 80px;
+        }
+
+        .btn-upload {
+            background: #c9a227;
+            color: #000;
+        }
+
+        .btn-upload:hover {
+            background: #ffd700;
+        }
+
+        .btn-copy {
+            background: #333;
+            color: #fff;
+        }
+
+        .btn-copy:hover {
+            background: #444;
+        }
+
+        .btn-prompt {
+            background: #5a4a9a;
+            color: #fff;
+        }
+
+        .btn-prompt:hover {
+            background: #6a5aaa;
+        }
+
+        .btn-remove {
+            background: #dc3545;
+            color: #fff;
+        }
+
+        .btn-remove:hover {
+            background: #c82333;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .upload-input {
+            display: none;
+        }
+
+        /* Audio specific styles */
+        .audio-player {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .audio-player audio {
+            width: 100%;
+            height: 40px;
+        }
+
+        .upload-area {
+            border: 2px dashed #555;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .upload-area:hover {
+            border-color: #c9a227;
+            background: rgba(201, 162, 39, 0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: #c9a227;
+            background: rgba(201, 162, 39, 0.2);
+        }
+
+        .upload-area .upload-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .upload-area .upload-text {
+            color: #888;
+        }
+
+        /* Modal */
+        .prompt-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .prompt-modal.hidden {
+            display: none;
+        }
+
+        .prompt-content {
+            background: #1a1a2e;
+            border: 2px solid #c9a227;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .prompt-content h3 {
+            color: #c9a227;
+            margin-bottom: 10px;
+        }
+
+        .prompt-description {
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .prompt-text {
+            background: #0a0a15;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+
+        .prompt-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .prompt-buttons .btn {
+            flex: none;
+            padding: 12px 30px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #28a745;
+            color: #fff;
+            padding: 15px 25px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease;
+            z-index: 1001;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .toast.hidden {
+            display: none;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .export-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #0a0a15;
+            border-radius: 12px;
+            border: 1px solid #333;
+        }
+
+        .export-section h3 {
+            color: #c9a227;
+            margin-bottom: 15px;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .export-buttons .btn {
+            flex: none;
+            padding: 12px 24px;
+        }
+
+        .sync-notice {
+            background: rgba(201, 162, 39, 0.1);
+            border: 1px solid #c9a227;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #c9a227;
+        }
+
+        @media (max-width: 768px) {
+            .asset-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .category-tabs {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dragon Run: Asset Manager</h1>
+            <p>Manage all game assets - images and audio</p>
+            <div id="serverStatus" class="offline">
+                Checking upload server...
+            </div>
+            <div style="margin-top: 8px; font-size: 12px; color: #888;">
+                Run <code style="background: #333; padding: 2px 6px; border-radius: 3px;">node upload-server.js</code> to enable saving files to disk
+            </div>
+        </header>
+
+        <div class="progress-bar-container">
+            <h2>Overall Progress</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                <div class="progress-text" id="progressText">0 / 0 Assets</div>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value" id="statUploaded">0</div>
+                    <div class="stat-label">Uploaded</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statPending">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statImages">0/0</div>
+                    <div class="stat-label">Images</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statAudio">0/0</div>
+                    <div class="stat-label">Audio</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sync-notice" id="syncNotice" style="display: none;">
+            Syncing with filesystem... Assets detected on disk have been marked as uploaded.
+        </div>
+
+        <!-- Main Tabs -->
+        <div class="main-tabs">
+            <div class="main-tab active" data-main="images">
+                Images <span class="count" id="imageCount">0/0</span>
+            </div>
+            <div class="main-tab" data-main="audio">
+                Audio <span class="count" id="audioCount">0/0</span>
+            </div>
+        </div>
+
+        <!-- Images Content -->
+        <div class="main-content active" id="main-images">
+            <div class="category-tabs" id="imageTabs"></div>
+            <div class="asset-grid" id="imageGrid"></div>
+        </div>
+
+        <!-- Audio Content -->
+        <div class="main-content" id="main-audio">
+            <div class="category-tabs" id="audioTabs"></div>
+            <div class="asset-grid" id="audioGrid"></div>
+        </div>
+
+        <div class="export-section">
+            <h3>Export & Actions</h3>
+            <div class="export-buttons">
+                <button class="btn btn-upload" onclick="exportStatus()">Export Progress JSON</button>
+                <button class="btn btn-copy" onclick="downloadAllPrompts()">Download All Prompts</button>
+                <button class="btn btn-prompt" onclick="syncWithFilesystem()">Sync with Filesystem</button>
+                <button class="btn btn-remove" onclick="confirmClearAll()">Clear All Local Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div class="prompt-modal hidden" id="promptModal">
+        <div class="prompt-content">
+            <h3 id="promptTitle">AI Prompt</h3>
+            <p class="prompt-description" id="promptDescription"></p>
+            <div class="prompt-text" id="promptText"></div>
+            <div class="prompt-buttons">
+                <button class="btn btn-upload" onclick="copyPrompt()">Copy to Clipboard</button>
+                <button class="btn btn-copy" onclick="closePromptModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast hidden" id="toast"></div>
+
+    <script>
+        // ============================================================================
+        // IMAGE ASSET DATABASE
+        // ============================================================================
+        const imageDatabase = {
+            backgrounds: {
+                name: "Backgrounds",
+                assets: [
+                    {
+                        id: "bg_causeway_main",
+                        name: "Main Game Background",
+                        filename: "bg_causeway_main.png",
+                        dimensions: "3840 x 2160 (4K)",
+                        path: "assets/images/backgrounds/",
+                        prompt: `16-bit pixel art game background, elevated stone causeway bridge winding through dark fantasy cavern, snaking path from bottom-left to top-right, ancient weathered stone bridges with wooden plank sections, deep chasm below with orange lava glow, distant castle silhouette on left, volcanic mountain on right, dark atmospheric cave ceiling, torches along the path, Metal Slug art style, rich detailed pixel art, game asset, 3840x2160 4K resolution, --ar 16:9 --style raw`
+                    },
+                    {
+                        id: "bg_title_screen",
+                        name: "Title Screen Background",
+                        filename: "bg_title_screen.png",
+                        dimensions: "3840 x 2160 (4K)",
+                        path: "assets/images/backgrounds/",
+                        prompt: `16-bit pixel art title screen, epic fantasy scene, massive red dragon coiled around gothic castle tower, four heroic knights approaching on stone bridge, dramatic sunset lighting orange and purple sky, fantasy Metal Slug style, detailed pixel art, game logo space at top center, rich colors, medieval fantasy atmosphere, 3840x2160 4K resolution, --ar 16:9 --style raw`
+                    }
+                ]
+            },
+            tiles: {
+                name: "Board Tiles",
+                assets: [
+                    {
+                        id: "tile_stone",
+                        name: "Stone Tile",
+                        filename: "tile_stone.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Single pixel art stone tile on plain white background, top-down view, weathered gray cobblestone, subtle cracks and moss details, medieval fantasy style, game asset, 64x64 pixels, solid white background #FFFFFF, tileable edges, 16-bit style, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_wood",
+                        name: "Wood Tile",
+                        filename: "tile_wood.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Single pixel art wooden plank tile on plain white background, top-down view, aged brown wooden planks, visible wood grain and iron nails, bridge flooring, game asset, 64x64 pixels, solid white background #FFFFFF, tileable, 16-bit pixel art style, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_start",
+                        name: "Start Tile",
+                        filename: "tile_start.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art game start tile on plain white background, stone tile with green banner flag, word START carved into stone, decorative border, fantasy medieval style, 64x64 pixels, solid white background #FFFFFF, 16-bit game asset, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_finish",
+                        name: "Finish Tile",
+                        filename: "tile_finish.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art game finish tile on plain white background, golden crown emblem in center, black and white checkered border, royal purple accents, victory celebration tile, fantasy medieval style, 64x64 pixels, solid white background #FFFFFF, 16-bit game asset, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_marker_knight",
+                        name: "Knight Tile Marker",
+                        filename: "tile_marker_knight.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art special tile marker, golden glowing aura, sword and shield emblem, positive power-up indicator, fantasy game asset, shimmering gold effect, 64x64 pixels, transparent background, 16-bit style --s 250`
+                    },
+                    {
+                        id: "tile_marker_dragon",
+                        name: "Dragon Tile Marker",
+                        filename: "tile_marker_dragon.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art danger tile marker, red orange glowing aura, dragon claw emblem with flames, hazard warning indicator, fantasy game asset, ominous fire effect, 64x64 pixels, transparent background, 16-bit style --s 250`
+                    },
+                    {
+                        id: "tile_fire",
+                        name: "Fire Elemental Tile",
+                        filename: "tile_fire.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art stone tile with fire effect on plain white background, top-down view, cracked volcanic stone with glowing orange lava cracks, flickering flame wisps rising, ember particles, hot dangerous terrain, fantasy game board tile, 64x64 pixels, solid white background #FFFFFF, tileable, 16-bit style, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_ice",
+                        name: "Ice Elemental Tile",
+                        filename: "tile_ice.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art stone tile with ice effect on plain white background, top-down view, frosted blue crystalline surface, ice crystals and snowflakes, frozen cracks pattern, cold magical terrain, fantasy game board tile, 64x64 pixels, solid white background #FFFFFF, tileable, 16-bit style, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_poison",
+                        name: "Poison Elemental Tile",
+                        filename: "tile_poison.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art stone tile with poison effect on plain white background, top-down view, sickly green toxic slime covering stone, bubbling acid pools, dripping poisonous goo, swamp hazard terrain, fantasy game board tile, 64x64 pixels, solid white background #FFFFFF, tileable, 16-bit style, no shadows on background --s 250`
+                    },
+                    {
+                        id: "tile_marker_special",
+                        name: "Special/Bonus Tile Marker",
+                        filename: "tile_marker_special.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/tiles/",
+                        prompt: `Pixel art special bonus tile marker, glowing golden star or sparkle effect, magical shimmering reward indicator, treasure and bonus symbol, fantasy game asset, radiant golden and white glow effect, 64x64 pixels, transparent background, 16-bit style --s 250`
+                    }
+                ]
+            },
+            characterCards: {
+                name: "Character Cards (MTG Style)",
+                assets: [
+                    {
+                        id: "card_reginald",
+                        name: "Sir Reginald Card",
+                        filename: "card_reginald.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Sir Reginald The Brave Knight, a powerful noble knight in gleaming red and silver plate armor standing heroically, massive tower shield with dragon emblem, longsword held aloft catching divine light, strong jawline and determined eyes, flowing red cape billowing dramatically, standing atop castle battlements at sunset, golden hour lighting with dramatic clouds, epic heroic pose, highly detailed fantasy art, oil painting style, rich saturated colors, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "card_elara",
+                        name: "Elara Card",
+                        filename: "card_elara.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Elara The Clever Wizard, an elegant female mage in flowing deep blue robes with silver arcane patterns, pointed wizard hat adorned with stars, holding a crystal-topped staff crackling with blue magical energy, mysterious knowing eyes with a hint of a smile, arcane runes floating around her, ancient library tower background with floating books and magical orbs, mystical blue and purple lighting, highly detailed fantasy art, oil painting style, rich colors, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "card_kaelen",
+                        name: "Kaelen Card",
+                        filename: "card_kaelen.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Kaelen The Rogue Archer, a mysterious hooded ranger in forest green and brown leather armor, face partially shadowed by hood revealing sharp confident eyes, drawing back an ornate longbow with glowing arrow, quiver of arrows on back, agile athletic build, perched on ancient tree branch in enchanted forest, dappled sunlight through canopy, leaves and mist in background, highly detailed fantasy art, oil painting style, earthy green and brown tones, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "card_aurelia",
+                        name: "Princess Aurelia Card",
+                        filename: "card_aurelia.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Princess Aurelia The Royal, a beautiful warrior princess in elegant golden armor dress with royal purple accents, jeweled tiara crown atop flowing blonde hair, wielding a slender rapier with confidence, regal bearing with fierce determination in her eyes, standing in opulent throne room with stained glass windows, golden light rays streaming through, treasure and royal banners in background, highly detailed fantasy art, oil painting style, gold and purple royal colors, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "card_grizelda",
+                        name: "Grizelda Card",
+                        filename: "card_grizelda.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Grizelda The Dwarf Engineer, a stout female dwarf with intricate braided red beard and wild red hair, brass goggles pushed up on forehead, wearing leather work apron covered in tools and gadgets, holding a massive steam-powered mechanical warhammer with glowing gears, confident proud stance, underground forge workshop background with molten metal and blueprints, warm orange forge lighting, sparks flying, highly detailed fantasy art, oil painting style, warm browns and brass tones, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "card_pippin",
+                        name: "Pippin Card",
+                        filename: "card_pippin.png",
+                        dimensions: "512 x 768",
+                        path: "assets/images/cards/",
+                        prompt: `Fantasy illustration artwork, Magic The Gathering card art style, Pippin The Mischievous Bard, a cheerful halfling with curly brown hair and twinkling mischievous eyes, wearing flamboyant purple and gold jester-style outfit with small bells, feathered cap at a rakish angle, playing an ornate lute with magical notes floating from strings, charming confident smile, performing in a lively medieval tavern with enchanted audience, warm candlelight and magical sparkles, highly detailed fantasy art, oil painting style, vibrant purple and gold colors, ornate golden frame border, 512x768, --ar 2:3 --s 750`
+                    }
+                ]
+            },
+            characters: {
+                name: "Player Characters (Sprites)",
+                assets: [
+                    {
+                        id: "char_reginald",
+                        name: "Sir Reginald (Knight)",
+                        filename: "char_reginald_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, medieval knight character, heavy plate armor red and silver colors, large sword and tower shield, brave heroic pose, 4x4 grid layout (16 frames total) evenly spaced in perfect grid, idle walk and victory poses, chibi proportions, Metal Slug character style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "char_elara",
+                        name: "Elara (Wizard)",
+                        filename: "char_elara_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, female wizard character, flowing blue robes and pointed wizard hat, magical staff with glowing blue crystal, arcane symbols on clothing, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle walk victory poses, chibi Metal Slug style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "char_kaelen",
+                        name: "Kaelen (Archer)",
+                        filename: "char_kaelen_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, hooded archer rogue character, green and brown leather armor, longbow and arrow quiver, hood shadowing face, agile nimble pose, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle walk victory poses, chibi Metal Slug style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "char_aurelia",
+                        name: "Princess Aurelia",
+                        filename: "char_aurelia_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, princess warrior character, elegant golden armor dress, royal tiara crown, rapier sword, regal but battle-ready pose, blonde hair, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle walk victory poses, chibi Metal Slug style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "char_grizelda",
+                        name: "Grizelda (Dwarf)",
+                        filename: "char_grizelda_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, female dwarf engineer character, stout body braided red beard, brass goggles on forehead, mechanical warhammer with gears, leather apron with tools, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle walk victory poses, chibi Metal Slug style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "char_pippin",
+                        name: "Pippin (Bard)",
+                        filename: "char_pippin_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/characters/",
+                        prompt: `Pixel art sprite sheet on plain white background, halfling bard character, cheerful smiling face, purple and gold jester-like outfit with bells, carrying lute instrument, feathered cap, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle walk victory poses, chibi Metal Slug style, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit game asset, no shadows on background --ar 1:1`
+                    }
+                ]
+            },
+            dragons: {
+                name: "Dragons",
+                assets: [
+                    {
+                        id: "dragon_slimetooth",
+                        name: "Slime-Tooth (Swamp)",
+                        filename: "dragon_slimetooth_sheet.png",
+                        dimensions: "512 x 512 (4x4 grid, 128px frames)",
+                        path: "assets/images/dragons/",
+                        prompt: `Pixel art dragon sprite sheet on plain white background, green swamp dragon, serpentine body dripping with slime and acid, multiple glowing eyes, gooey toxic texture, menacing but cartoonish, 4x4 grid layout (16 frames total) evenly spaced in perfect grid, idle breathing and acid spit attack animations, each frame exactly 128x128 pixels, 512x512 total image size, solid white background #FFFFFF, 16-bit Metal Slug monster style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "dragon_frostfang",
+                        name: "Frost-Fang (Ice)",
+                        filename: "dragon_frostfang_sheet.png",
+                        dimensions: "512 x 512 (4x4 grid, 128px frames)",
+                        path: "assets/images/dragons/",
+                        prompt: `Pixel art dragon sprite sheet on plain white background, ice dragon blue and white, crystalline frozen scales, icicle horns and spines, frost breath with snowflakes, cold mist aura, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and ice breath attack animations, each frame exactly 128x128 pixels, 512x512 total image size, solid white background #FFFFFF, 16-bit Metal Slug style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "dragon_ignis",
+                        name: "Ignis the King (Fire)",
+                        filename: "dragon_ignis_sheet.png",
+                        dimensions: "512 x 512 (4x4 grid, 128px frames)",
+                        path: "assets/images/dragons/",
+                        prompt: `Pixel art dragon sprite sheet on plain white background, massive fire dragon king, red and orange with molten gold scales, crown of flames on head, glowing ember eyes, smoke from nostrils, majestic terrifying boss monster, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and fire breath attack, each frame exactly 128x128 pixels, 512x512 total image size, solid white background #FFFFFF, 16-bit Metal Slug boss style, no shadows on background --ar 1:1`
+                    }
+                ]
+            },
+            knights: {
+                name: "Knights (Ladders)",
+                assets: [
+                    {
+                        id: "knight_hedge",
+                        name: "Hedge Knight",
+                        filename: "knight_hedge_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/knights/",
+                        prompt: `Pixel art knight sprite sheet on plain white background, humble hedge knight, worn steel gray armor with green tabard, friendly helpful expression, extending hand upward gesture, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and helping animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "knight_griffin",
+                        name: "Griffin Rider",
+                        filename: "knight_griffin_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/knights/",
+                        prompt: `Pixel art griffin rider sprite sheet on plain white background, knight in silver armor with purple cape, mounted on majestic griffin, eagle head lion body, wings spread ready to carry player, 4x4 grid layout (16 frames) evenly spaced in perfect grid, hover and flight animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "knight_champion",
+                        name: "King's Champion",
+                        filename: "knight_champion_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/knights/",
+                        prompt: `Pixel art champion knight sprite sheet on plain white background, elite warrior in gleaming gold armor, flowing red royal cape, champion crown helmet, powerful victorious pose, raised sword salute, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and salute animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    }
+                ]
+            },
+            monsters: {
+                name: "Monsters",
+                assets: [
+                    {
+                        id: "monster_milkbaby",
+                        name: "Monster Milk Baby",
+                        filename: "monster_milkbaby_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art monster sprite sheet on plain white background, cute creepy milk baby creature, wobbly cream-colored body, rosy cheeks, big watery eyes, sticky dripping texture, throwing tantrum pose, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and crying attack animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit quirky style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "monster_taxgoblin",
+                        name: "Goblin Tax Collector",
+                        filename: "monster_taxgoblin_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art goblin sprite sheet on plain white background, greedy tax collector goblin, tattered fancy noble clothes, monocle and bent top hat, carrying ledger book and bulging coin purse, green skin long nose, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and demanding money animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "monster_hillgiant",
+                        name: "Snoozing Hill-Giant",
+                        filename: "monster_hillgiant_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art giant sprite sheet on plain white background, sleeping hill giant, massive brown-green skin, patched primitive clothing, lying down snoring, floating Z letters, peaceful but dangerous if woken, 4x4 grid layout (16 frames) evenly spaced in perfect grid, sleeping and startled wake animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "monster_mimic",
+                        name: "Mimic Chest",
+                        filename: "monster_mimic_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art mimic sprite sheet on plain white background, treasure chest monster, first frames look like normal wooden chest with gold trim, transforms to reveal sharp teeth tongue and one eye, wooden texture with metal bands, 4x4 grid layout (16 frames) evenly spaced in perfect grid, closed chest to open attack, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "monster_vampires",
+                        name: "Lucy & Vampire Family",
+                        filename: "monster_vampires_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art vampire family sprite sheet on plain white background, elegant mother vampire Lucy in gothic black dress, two small vampire children, pale skin red eyes, cute but spooky, small bats flying around, 4x4 grid layout (16 frames) evenly spaced in perfect grid, welcoming and hypnotize animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "monster_hypnotoad",
+                        name: "Hypno-Toad",
+                        filename: "monster_hypnotoad_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/monsters/",
+                        prompt: `Pixel art hypno toad sprite sheet on plain white background, large magical toad, spiral hypnotic eyes with rainbow colors, purple and green warty skin, glowing psychedelic patterns, sitting zen pose, 4x4 grid layout (16 frames) evenly spaced in perfect grid, idle and eye spiral hypnotize animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit quirky style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "portal_balanced",
+                        name: "Stable Portal",
+                        filename: "portal_balanced_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/portals/",
+                        prompt: `Pixel art portal sprite sheet on plain white background, serene green magical portal, swirling emerald energy vortex, calm mystical glow, nature-themed with leaves and sparkles, 4x4 grid layout (16 frames) evenly spaced in perfect grid, swirling rotation animation with pulsing glow, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "portal_risky",
+                        name: "Unstable Rift",
+                        filename: "portal_risky_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/portals/",
+                        prompt: `Pixel art portal sprite sheet on plain white background, volatile purple magical rift, crackling violet energy with lightning arcs, unstable flickering glow, dangerous but alluring, 4x4 grid layout (16 frames) evenly spaced in perfect grid, crackling lightning animation with unstable pulsing, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "portal_chaotic",
+                        name: "Chaos Vortex",
+                        filename: "portal_chaotic_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/portals/",
+                        prompt: `Pixel art portal sprite sheet on plain white background, terrifying red chaos vortex, swirling crimson void energy with flames and distortions, reality-warping effects, extremely dangerous appearance, 4x4 grid layout (16 frames) evenly spaced in perfect grid, chaotic swirling flame animation with reality tears, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit fantasy style, no shadows on background --ar 1:1`
+                    }
+                ]
+            },
+            items: {
+                name: "Items",
+                assets: [
+                    {
+                        id: "item_armor_shard",
+                        name: "Armor Shard",
+                        filename: "item_armor_shard.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/items/",
+                        prompt: `Pixel art item icon on plain white background, glowing armor shard piece, metallic silver with blue magical glow, defensive shield fragment, fantasy RPG inventory item, 64x64 pixels, solid white background #FFFFFF, 16-bit style, no shadows on background`
+                    },
+                    {
+                        id: "item_speed_potion",
+                        name: "Speed Potion",
+                        filename: "item_speed_potion.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/items/",
+                        prompt: `Pixel art item icon on plain white background, speed potion in glass bottle, swirling yellow-orange liquid, lightning bolt on label, cork stopper, fantasy RPG inventory item, 64x64 pixels, solid white background #FFFFFF, 16-bit style, no shadows on background`
+                    },
+                    {
+                        id: "item_spell_scroll",
+                        name: "Spell Scroll",
+                        filename: "item_spell_scroll.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/items/",
+                        prompt: `Pixel art item icon on plain white background, magical spell scroll, rolled parchment with purple ribbon, glowing arcane symbols, mystical aura, fantasy RPG inventory item, 64x64 pixels, solid white background #FFFFFF, 16-bit style, no shadows on background`
+                    },
+                    {
+                        id: "item_smoke_bomb",
+                        name: "Smoke Bomb",
+                        filename: "item_smoke_bomb.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/items/",
+                        prompt: `Pixel art item icon on plain white background, ninja smoke bomb, round black sphere with fuse, wisps of gray smoke, stealthy escape item, fantasy RPG inventory item, 64x64 pixels, solid white background #FFFFFF, 16-bit style, no shadows on background`
+                    },
+                    {
+                        id: "item_holy_shield",
+                        name: "Holy Shield",
+                        filename: "item_holy_shield.png",
+                        dimensions: "64 x 64",
+                        path: "assets/images/items/",
+                        prompt: `Pixel art item icon on plain white background, holy shield amulet, golden cross on shield shape, divine light rays, protective blessing item, fantasy RPG inventory item, 64x64 pixels, solid white background #FFFFFF, 16-bit style, no shadows on background`
+                    }
+                ]
+            },
+            ui: {
+                name: "UI Elements",
+                assets: [
+                    {
+                        id: "ui_dice_sheet",
+                        name: "Dice (6 faces + extras)",
+                        filename: "ui_dice_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/ui/",
+                        prompt: `Pixel art dice sprite sheet on plain white background, ivory colored D6 die, 4x4 grid layout showing faces 1-6 in first two rows, rolling animation frames in bottom rows, golden dots/pips, ornate medieval style with subtle engravings, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "ui_character_select",
+                        name: "Character Select Screen",
+                        filename: "ui_character_select.png",
+                        dimensions: "800 x 600",
+                        path: "assets/images/ui/",
+                        prompt: `Pixel art character selection UI screen, medieval fantasy style frame with ornate golden borders, spaces for 6 character portraits in a grid, decorative dragon motifs, parchment texture background, "Choose Your Hero" banner at top, 800x600 pixels, 16-bit style`
+                    },
+                    {
+                        id: "ui_logo",
+                        name: "Game Logo",
+                        filename: "ui_logo.png",
+                        dimensions: "500 x 120",
+                        path: "assets/images/ui/",
+                        prompt: `Pixel art game logo, "DRAGON RUN" text, medieval fantasy font style, golden letters with red dragon silhouette incorporated, "The Royal Race" subtitle below smaller, ornate decorative flourishes, 500x120 pixels, transparent background, 16-bit style`
+                    }
+                ]
+            },
+            effects: {
+                name: "Effects",
+                assets: [
+                    {
+                        id: "fx_fire",
+                        name: "Fire Effect",
+                        filename: "fx_fire_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/effects/",
+                        prompt: `Pixel art fire animation sprite sheet on plain white background, flickering flames, orange yellow red gradient, 4x4 grid layout (16 frames) evenly spaced in perfect grid, looping fire animation sequence, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style particle effect, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "fx_ice",
+                        name: "Ice Effect",
+                        filename: "fx_ice_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/effects/",
+                        prompt: `Pixel art ice crystal animation sprite sheet on plain white background, sparkling frost particles, blue white cyan colors, 4x4 grid layout (16 frames) evenly spaced in perfect grid, shimmer and freeze animation, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style particle effect, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "fx_sparkle",
+                        name: "Magic Sparkle Effect",
+                        filename: "fx_sparkle_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/effects/",
+                        prompt: `Pixel art magic sparkle animation on plain white background, twinkling star particles, purple and gold colors, magical fairy dust, 4x4 grid layout (16 frames) evenly spaced in perfect grid, sparkle burst sequence, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style effect, no shadows on background --ar 1:1`
+                    },
+                    {
+                        id: "fx_smoke",
+                        name: "Smoke/Dust Effect",
+                        filename: "fx_smoke_sheet.png",
+                        dimensions: "256 x 256 (4x4 grid, 64px frames)",
+                        path: "assets/images/effects/",
+                        prompt: `Pixel art smoke poof animation on plain white background, expanding dust cloud, gray brown colors, cartoon impact effect, 4x4 grid layout (16 frames) evenly spaced in perfect grid, dissipating sequence, each frame exactly 64x64 pixels, 256x256 total image size, solid white background #FFFFFF, 16-bit style, no shadows on background --ar 1:1`
+                    }
+                ]
+            },
+            encounters: {
+                name: "Encounter Cards",
+                assets: [
+                    {
+                        id: "encounter_milkbaby",
+                        name: "Monster Milk Baby",
+                        filename: "encounter_milkbaby.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Monster Milk Baby creature, a disturbing yet adorable blob-like creature made of curdled milk and cream, wobbly gelatinous white body with pink rosy cheeks, large watery puppy-dog eyes that hypnotize, dripping sticky texture, sitting in a puddle of its own goop, dark dungeon setting with torchlight, dramatic lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_taxgoblin",
+                        name: "Goblin Tax Collector",
+                        filename: "encounter_taxgoblin.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Goblin Tax Collector, a greedy goblin bureaucrat in tattered noble finery, green warty skin with long crooked nose, wearing bent top hat and monocle, clutching oversized leather-bound ledger book and bulging coin purse, gold coins spilling out, standing at medieval toll booth, cunning malicious grin, dramatic lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_hillgiant",
+                        name: "Snoozing Hill-Giant",
+                        filename: "encounter_hillgiant.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Snoozing Hill-Giant, a massive sleeping giant with brown-green mottled skin, lying across a mountain path blocking the way, wearing primitive patched clothing made of animal hides, peaceful sleeping face with deep snoring, club weapon lying beside him, small birds nesting in his tangled hair, dramatic sunset lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_mimic",
+                        name: "Mimic Chest",
+                        filename: "encounter_mimic.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Mimic treasure chest monster, a wooden chest with gold trim that has transformed to reveal rows of razor-sharp teeth, a long slimy tongue, and a single malevolent eye, the lid forms a monstrous mouth, coins and jewels as bait visible inside, chains and locks as tentacles, dungeon treasure room setting, dramatic torchlight, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_hypnotoad",
+                        name: "Hypno-Toad",
+                        filename: "encounter_hypnotoad.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Hypno-Toad, a large magical toad with mesmerizing spiral-pattern eyes that glow with rainbow psychedelic colors, purple and green warty skin covered in luminescent patterns, sitting on a mystical lily pad in an enchanted swamp, magical hypnotic energy radiating outward, dramatic mystical lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_vampires",
+                        name: "Lucy & Vampire Family",
+                        filename: "encounter_vampires.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Lucy the vampire mother and her two vampire children, elegant gothic family portrait, mother in flowing black Victorian dress with pale porcelain skin and glowing red eyes, two small vampire children clinging to her dress with innocent yet predatory expressions, small bats flying around them, gothic castle interior with candelabras and velvet curtains, moonlight through stained glass, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_slimetooth",
+                        name: "Slime-Tooth Dragon",
+                        filename: "encounter_slimetooth.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Slime-Tooth the swamp dragon, a serpentine dragon made of toxic green slime and acid, multiple glowing yellow eyes, gooey dripping body that dissolves everything it touches, emerging from a bubbling poisonous swamp, skeletal remains of victims visible beneath the murky water, noxious fumes rising, dramatic lighting through swamp mist, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_frostfang",
+                        name: "Frost-Fang Dragon",
+                        filename: "encounter_frostfang.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Frost-Fang the ice dragon, a majestic dragon with crystalline frozen scales of blue and white, icicle horns and spines along its back, frost breath with swirling snowflakes emanating from its mouth, cold mist aura surrounding its body, perched on a frozen mountain peak, aurora borealis in the night sky behind, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_ignis",
+                        name: "Ignis the Dragon King",
+                        filename: "encounter_ignis.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Ignis the Dragon King, a massive ancient fire dragon with red and orange scales mixed with molten gold, wearing a crown of eternal flames on his head, glowing ember eyes full of ancient wisdom and fury, smoke billowing from nostrils, seated on a throne of obsidian and gold in a volcanic throne room, rivers of lava flowing below, the ultimate boss monster, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_hedgeknight",
+                        name: "Hedge Knight",
+                        filename: "encounter_hedgeknight.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Hedge Knight, a humble wandering knight in well-worn but well-maintained steel armor with a simple green tabard, friendly weathered face with kind eyes, extending a helping hand upward to assist a traveler, standing at a crossroads with a milestone marker, faithful horse visible in background, golden afternoon sunlight, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_griffinrider",
+                        name: "Griffin Rider",
+                        filename: "encounter_griffinrider.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Griffin Rider, an elite knight in polished silver armor with flowing purple cape, mounted on a magnificent griffin with eagle head and lion body, wings spread majestically ready to take flight, offering to carry travelers to safety, mountain peaks and clouds in background, dramatic sunset lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_champion",
+                        name: "King's Champion",
+                        filename: "encounter_champion.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, King's Champion, an elite warrior in gleaming golden ceremonial armor, flowing red royal cape with heraldic emblems, champion's crown helm with white plume, powerful victorious pose with raised sword saluting, standing before the throne room entrance, royal guards and banners in background, dramatic golden lighting, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_treasure",
+                        name: "Treasure Chest",
+                        filename: "encounter_treasure.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Treasure Chest discovery, an ornate wooden chest with golden bands and jeweled lock, lid opening to reveal a golden glow from within, piles of gold coins and precious gems spilling out, magical items visible including potions and scrolls, ancient dungeon alcove setting with cobwebs and dust, divine light rays illuminating the treasure, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_anvil",
+                        name: "Rusty Anvil",
+                        filename: "encounter_anvil.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Rusty Anvil of fate, an ancient weathered blacksmith's anvil covered in rust and mysterious runes, magical sparks flying as if recently struck by an invisible hammer, broken weapons and armor scattered around it, abandoned forge setting with cobwebs and dust, an ethereal ghostly blacksmith visible in the smoke, mysterious ominous atmosphere, highly detailed fantasy art, oil painting style, rich colors, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_portal_balanced",
+                        name: "Stable Portal (Green)",
+                        filename: "encounter_portal_balanced.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Stable Portal, a serene green glowing magical portal swirling gently in a forest grove, emerald energy spiraling calmly, ancient moss-covered stone archway with nature runes, peaceful mystical atmosphere with floating leaves and fireflies, a traveler approaching cautiously, sense of safety and balance, highly detailed fantasy art, oil painting style, rich green tones, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_portal_risky",
+                        name: "Unstable Rift (Purple)",
+                        filename: "encounter_portal_risky.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Unstable Rift, a volatile purple magical portal crackling with unstable energy, violet and magenta lightning arcing from its edges, ancient cracked stone archway with glowing warning runes, treasure glimpsed through the rift but also danger, a gambler's portal, sense of high risk high reward, highly detailed fantasy art, oil painting style, rich purple tones, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    },
+                    {
+                        id: "encounter_portal_chaotic",
+                        name: "Chaos Vortex (Red)",
+                        filename: "encounter_portal_chaotic.png",
+                        dimensions: "512 x 768 (artwork only)",
+                        path: "assets/images/encounters/",
+                        prompt: `Fantasy illustration artwork only, no text no title no stats no card frame, Chaos Vortex, a terrifying red swirling vortex of pure chaos energy, crimson flames and reality-warping distortions, shattered stone archway barely containing the void, glimpses of multiple dimensions and impossible geometry within, sense of extreme danger and unpredictability, highly detailed fantasy art, oil painting style, intense red and black tones, simple thin ornate golden border around edge, 512x768, --ar 2:3 --s 750`
+                    }
+                ]
+            }
+        };
+
+        // ============================================================================
+        // AUDIO DATABASE
+        // ============================================================================
+        const audioDatabase = {
+            music: {
+                name: "Music",
+                assets: [
+                    { id: "music_title", name: "Title Screen Theme", filename: "music_title.mp3", description: "Epic, adventurous intro music.", format: "MP3/OGG, 1-2 min, loopable", loop: true, prompt: `Create an epic medieval fantasy title screen theme for "Dragon Run: The Royal Race". Style: Orchestral fantasy adventure. Mood: Heroic, adventurous. Tempo: 100-120 BPM. Duration: 1-2 minutes, loopable. Include brass fanfare, sweeping strings, harp arpeggios.` },
+                    { id: "music_character_select", name: "Character Select", filename: "music_character_select.mp3", description: "Upbeat, anticipatory music.", format: "MP3/OGG, 30-60 sec, loopable", loop: true, prompt: `Create upbeat character selection music for a fantasy board game. Style: Playful medieval/fantasy. Tempo: 120-140 BPM. Duration: 30-60 seconds, loopable. Include lute, flute, light percussion.` },
+                    { id: "music_gameplay", name: "Main Gameplay Theme", filename: "music_gameplay.mp3", description: "Light, fun game music.", format: "MP3/OGG, 2-3 min, loopable", loop: true, prompt: `Create main gameplay theme for a fantasy board game race. Style: Medieval adventure, energetic. Tempo: 110-130 BPM. Duration: 2-3 minutes, loopable. Engaging but not fatiguing.` },
+                    { id: "music_tension", name: "Tension/Dragon Nearby", filename: "music_tension.mp3", description: "Suspenseful danger music.", format: "MP3/OGG, 30-60 sec, loopable", loop: true, prompt: `Create suspenseful music for approaching dragon encounters. Style: Dark fantasy, ominous. Tempo: 80-100 BPM. Duration: 30-60 seconds, loopable. Low strings tremolo, timpani rumbles.` },
+                    { id: "music_victory", name: "Victory Fanfare", filename: "music_victory.mp3", description: "Triumphant celebration!", format: "MP3/OGG, 10-20 sec", loop: false, prompt: `Create triumphant victory fanfare. Style: Heroic orchestral celebration. Duration: 10-20 seconds. Bold brass fanfare, sweeping strings, cymbal crashes.` },
+                    { id: "music_encounter", name: "Encounter Theme", filename: "music_encounter.mp3", description: "Monster encounter music.", format: "MP3/OGG, 20-40 sec, loopable", loop: true, prompt: `Create encounter/battle music for monster confrontations. Style: Action-fantasy. Tempo: 130-150 BPM. Duration: 20-40 seconds, loopable. Driving strings, brass stabs.` }
+                ]
+            },
+            "sfx-ui": {
+                name: "UI Sounds",
+                assets: [
+                    { id: "sfx_button_hover", name: "Button Hover", filename: "sfx_button_hover.mp3", description: "Subtle hover sound.", format: "< 0.2 sec", prompt: `Create button hover sound. Soft magical sparkle or gentle tick. Under 0.2 seconds. Subtle, non-intrusive.` },
+                    { id: "sfx_button_click", name: "Button Click", filename: "sfx_button_click.mp3", description: "Satisfying click.", format: "< 0.3 sec", prompt: `Create satisfying button click. Decisive click with medieval character. Under 0.3 seconds.` },
+                    { id: "sfx_character_select", name: "Character Selected", filename: "sfx_character_select.mp3", description: "Character pick confirmation.", format: "< 1 sec", prompt: `Create character selection confirmation sound. Heroic mini-fanfare with magical flourish. Under 1 second.` },
+                    { id: "sfx_turn_start", name: "Turn Start", filename: "sfx_turn_start.mp3", description: "Your turn notification.", format: "< 1 sec", prompt: `Create "your turn" notification. Quick trumpet call or horn. Under 1 second. Alerting, exciting.` }
+                ]
+            },
+            "sfx-gameplay": {
+                name: "Gameplay",
+                assets: [
+                    { id: "sfx_dice_shake", name: "Dice Shake", filename: "sfx_dice_shake.mp3", description: "Rattling dice.", format: "1-2 sec, loopable", prompt: `Create dice shaking sound. Multiple dice rattling in hands. 1-2 seconds, loopable.` },
+                    { id: "sfx_dice_roll", name: "Dice Land", filename: "sfx_dice_roll.mp3", description: "Dice settling.", format: "< 1 sec", prompt: `Create dice landing sound. Dice bouncing and settling on wood. Under 1 second.` },
+                    { id: "sfx_move_step", name: "Movement Step", filename: "sfx_move_step.mp3", description: "Tile hop sound.", format: "< 0.2 sec", prompt: `Create game piece movement step. Light hop on stone/wood. Under 0.2 seconds.` },
+                    { id: "sfx_knight_boost", name: "Knight Boost", filename: "sfx_knight_boost.mp3", description: "Heroic rising whoosh.", format: "1-2 sec", prompt: `Create knight lifting boost sound. Heroic rising whoosh with triumphant flourish. 1-2 seconds.` },
+                    { id: "sfx_dragon_slide", name: "Dragon Slide", filename: "sfx_dragon_slide.mp3", description: "Sliding down sound.", format: "1-2 sec", prompt: `Create sliding down dragon sound. Descending whoosh with comedic feel. 1-2 seconds.` },
+                    { id: "sfx_treasure_open", name: "Treasure Chest", filename: "sfx_treasure_open.mp3", description: "Magical chest opening.", format: "1-2 sec", prompt: `Create treasure chest opening. Creaky lid with magical sparkle. 1-2 seconds.` },
+                    { id: "sfx_item_get", name: "Item Obtained", filename: "sfx_item_get.mp3", description: "Item pickup.", format: "< 1 sec", prompt: `Create item obtained sound. Quick magical collection chime. Under 1 second.` },
+                    { id: "sfx_portal_teleport", name: "Portal Teleport", filename: "sfx_portal_teleport.mp3", description: "Magical teleport.", format: "1-2 sec", prompt: `Create portal teleportation sound. Magical dimensional travel whoosh. 1-2 seconds.` },
+                    { id: "sfx_win", name: "Player Wins", filename: "sfx_win.mp3", description: "Victory celebration!", format: "2-3 sec", prompt: `Create victory celebration sound. Triumphant fanfare with cheering. 2-3 seconds.` }
+                ]
+            },
+            "sfx-encounters": {
+                name: "Encounters",
+                assets: [
+                    { id: "sfx_encounter_start", name: "Encounter Start", filename: "sfx_encounter_start.mp3", description: "Dramatic sting.", format: "< 1 sec", prompt: `Create encounter start sting. Dramatic attention-grabbing sound. Under 1 second.` },
+                    { id: "sfx_encounter_success", name: "Encounter Success", filename: "sfx_encounter_success.mp3", description: "Triumphant pass.", format: "< 1 sec", prompt: `Create encounter success sound. Triumphant pass sound. Under 1 second.` },
+                    { id: "sfx_encounter_fail", name: "Encounter Fail", filename: "sfx_encounter_fail.mp3", description: "Fail sound.", format: "< 1 sec", prompt: `Create encounter fail sound. Sad trombone or comedic fail. Under 1 second.` },
+                    { id: "sfx_dragon_roar", name: "Dragon Roar", filename: "sfx_dragon_roar.mp3", description: "Fearsome roar!", format: "1-2 sec", prompt: `Create dragon roar. Fearsome fantasy dragon roar. 1-2 seconds.` },
+                    { id: "sfx_goblin_laugh", name: "Goblin Laugh", filename: "sfx_goblin_laugh.mp3", description: "Mischievous chuckle.", format: "< 1 sec", prompt: `Create goblin laugh. Mischievous goblin chuckle. Under 1 second.` },
+                    { id: "sfx_giant_stomp", name: "Giant Stomp", filename: "sfx_giant_stomp.mp3", description: "Heavy footstep.", format: "< 1 sec", prompt: `Create giant stomp. Heavy ground-shaking footstep. Under 1 second.` },
+                    { id: "sfx_hypno_spiral", name: "Hypno Effect", filename: "sfx_hypno_spiral.mp3", description: "Hypnotic sound.", format: "1-2 sec", prompt: `Create hypnotic swirling sound. Trippy hypnotize effect. 1-2 seconds.` },
+                    { id: "sfx_mimic_chomp", name: "Mimic Bite", filename: "sfx_mimic_chomp.mp3", description: "Chomping bite.", format: "< 1 sec", prompt: `Create mimic bite sound. Sharp chomping bite. Under 1 second.` }
+                ]
+            }
+        };
+
+        // ============================================================================
+        // STATE MANAGEMENT
+        // ============================================================================
+        let uploadedImages = {};
+        let uploadedAudio = {};
+        let currentImageCategory = 'backgrounds';
+        let currentAudioCategory = 'music';
+        let currentPrompt = '';
+        let db = null;
+
+        const UPLOAD_SERVER = 'http://localhost:3002';
+
+        // ============================================================================
+        // INITIALIZATION
+        // ============================================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initDB();
+            await loadState();
+            await syncWithFilesystem();
+            setupMainTabs();
+            renderImageTabs();
+            renderAudioTabs();
+            renderImages();
+            renderAudio();
+            updateProgress();
+            checkUploadServer();
+        });
+
+        // Check upload server status
+        async function checkUploadServer() {
+            const statusEl = document.getElementById('serverStatus');
+            try {
+                const response = await fetch(`${UPLOAD_SERVER}/status`, { timeout: 2000 });
+                if (response.ok) {
+                    statusEl.className = 'online';
+                    statusEl.textContent = 'Upload server connected - files saved to disk';
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (err) {
+                statusEl.className = 'offline';
+                statusEl.textContent = 'Upload server offline - run: node upload-server.js';
+            }
+        }
+
+        // Initialize IndexedDB
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('DragonRunAssets', 2);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => { db = request.result; resolve(); };
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains('images')) {
+                        database.createObjectStore('images', { keyPath: 'id' });
+                    }
+                    if (!database.objectStoreNames.contains('audio')) {
+                        database.createObjectStore('audio', { keyPath: 'id' });
+                    }
+                };
+            });
+        }
+
+        // Load state from IndexedDB
+        async function loadState() {
+            if (!db) return;
+
+            // Load images
+            await new Promise((resolve) => {
+                const tx = db.transaction(['images'], 'readonly');
+                const store = tx.objectStore('images');
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    req.result.forEach(item => { uploadedImages[item.id] = item.data; });
+                    resolve();
+                };
+                req.onerror = () => resolve();
+            });
+
+            // Load audio
+            await new Promise((resolve) => {
+                const tx = db.transaction(['audio'], 'readonly');
+                const store = tx.objectStore('audio');
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    req.result.forEach(item => { uploadedAudio[item.id] = item.data; });
+                    resolve();
+                };
+                req.onerror = () => resolve();
+            });
+        }
+
+        // Sync with actual filesystem
+        async function syncWithFilesystem() {
+            // Check which image files actually exist
+            for (const [catKey, category] of Object.entries(imageDatabase)) {
+                for (const asset of category.assets) {
+                    const url = asset.path + asset.filename;
+                    try {
+                        const response = await fetch(url, { method: 'HEAD' });
+                        if (response.ok) {
+                            uploadedImages[asset.id] = url;
+                            await saveAsset('images', asset.id, url);
+                        }
+                    } catch (e) {
+                        // File doesn't exist, that's ok
+                    }
+                }
+            }
+
+            // Check which audio files actually exist
+            for (const [catKey, category] of Object.entries(audioDatabase)) {
+                for (const asset of category.assets) {
+                    const url = 'assets/audio/' + asset.filename;
+                    try {
+                        const response = await fetch(url, { method: 'HEAD' });
+                        if (response.ok) {
+                            uploadedAudio[asset.id] = { filename: asset.filename, path: url };
+                            await saveAsset('audio', asset.id, { filename: asset.filename, path: url });
+                        }
+                    } catch (e) {
+                        // File doesn't exist
+                    }
+                }
+            }
+
+            document.getElementById('syncNotice').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('syncNotice').style.display = 'none';
+            }, 3000);
+        }
+
+        // Save asset to IndexedDB
+        async function saveAsset(store, assetId, data) {
+            if (!db) return;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction([store], 'readwrite');
+                const s = tx.objectStore(store);
+                const req = s.put({ id: assetId, data: data });
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // Delete asset from IndexedDB
+        async function deleteAsset(store, assetId) {
+            if (!db) return;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction([store], 'readwrite');
+                const s = tx.objectStore(store);
+                const req = s.delete(assetId);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // ============================================================================
+        // TAB MANAGEMENT
+        // ============================================================================
+        function setupMainTabs() {
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.main-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(`main-${tab.dataset.main}`).classList.add('active');
+                });
+            });
+        }
+
+        function renderImageTabs() {
+            const container = document.getElementById('imageTabs');
+            container.innerHTML = '';
+            Object.entries(imageDatabase).forEach(([key, category]) => {
+                const uploaded = category.assets.filter(a => uploadedImages[a.id]).length;
+                const total = category.assets.length;
+                const tab = document.createElement('div');
+                tab.className = `tab ${currentImageCategory === key ? 'active' : ''}`;
+                tab.innerHTML = `${category.name} <span class="badge ${uploaded === total ? '' : 'incomplete'}">${uploaded}/${total}</span>`;
+                tab.onclick = () => {
+                    currentImageCategory = key;
+                    renderImageTabs();
+                    renderImages();
+                };
+                container.appendChild(tab);
+            });
+        }
+
+        function renderAudioTabs() {
+            const container = document.getElementById('audioTabs');
+            container.innerHTML = '';
+            Object.entries(audioDatabase).forEach(([key, category]) => {
+                const uploaded = category.assets.filter(a => uploadedAudio[a.id]).length;
+                const total = category.assets.length;
+                const tab = document.createElement('div');
+                tab.className = `tab ${currentAudioCategory === key ? 'active' : ''}`;
+                tab.innerHTML = `${category.name} <span class="badge ${uploaded === total ? '' : 'incomplete'}">${uploaded}/${total}</span>`;
+                tab.onclick = () => {
+                    currentAudioCategory = key;
+                    renderAudioTabs();
+                    renderAudio();
+                };
+                container.appendChild(tab);
+            });
+        }
+
+        // ============================================================================
+        // RENDERING
+        // ============================================================================
+        function renderImages() {
+            const grid = document.getElementById('imageGrid');
+            grid.innerHTML = '';
+            const category = imageDatabase[currentImageCategory];
+            const cacheBuster = Date.now(); // Prevent browser caching on re-uploads
+            category.assets.forEach(asset => {
+                const isUploaded = uploadedImages[asset.id];
+                const imgSrc = typeof isUploaded === 'string' ? isUploaded : asset.path + asset.filename;
+                const card = document.createElement('div');
+                card.className = `asset-card ${isUploaded ? 'uploaded' : ''}`;
+                card.innerHTML = `
+                    <div class="asset-preview">
+                        ${isUploaded
+                            ? `<img src="${imgSrc}?v=${cacheBuster}" alt="${asset.name}">
+                               <div class="checkmark">✓</div>`
+                            : `<div class="placeholder">?</div>`
+                        }
+                    </div>
+                    <div class="asset-info">
+                        <div class="asset-name">${asset.name}</div>
+                        <div class="asset-filename">${asset.filename}</div>
+                        <div class="asset-dimensions">${asset.dimensions}</div>
+                        <div class="asset-actions">
+                            ${isUploaded
+                                ? `<button class="btn btn-remove" onclick="removeImage('${asset.id}', '${asset.filename}')">Remove</button>`
+                                : `<button class="btn btn-upload" onclick="triggerImageUpload('${asset.id}')">Upload</button>`
+                            }
+                            <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'image')">Prompt</button>
+                        </div>
+                    </div>
+                    <input type="file" class="upload-input" id="upload-${asset.id}" accept="image/*" onchange="handleImageUpload(event, '${asset.id}')">
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function renderAudio() {
+            const grid = document.getElementById('audioGrid');
+            grid.innerHTML = '';
+            const category = audioDatabase[currentAudioCategory];
+            category.assets.forEach(asset => {
+                const isUploaded = uploadedAudio[asset.id];
+                const card = document.createElement('div');
+                card.className = `asset-card ${isUploaded ? 'uploaded' : ''}`;
+                const audioPath = `assets/audio/${asset.filename}`;
+                card.innerHTML = `
+                    <div class="asset-info" style="padding-top: 20px;">
+                        <div class="asset-name">${asset.name}</div>
+                        <div class="asset-filename">${asset.filename}</div>
+                        <div class="asset-dimensions">${asset.description || ''}</div>
+                        <div style="color: #6a9fb5; font-size: 0.85em; margin: 10px 0;">${asset.format}</div>
+                        ${isUploaded ? `
+                            <div class="audio-player">
+                                <audio controls ${asset.loop ? 'loop' : ''}>
+                                    <source src="${audioPath}" type="audio/mpeg">
+                                </audio>
+                            </div>
+                            <div class="asset-actions">
+                                <button class="btn btn-remove" onclick="removeAudio('${asset.id}', '${asset.filename}')">Remove</button>
+                                <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'audio')">Prompt</button>
+                            </div>
+                        ` : `
+                            <div class="upload-area" onclick="document.getElementById('audio-${asset.id}').click()">
+                                <input type="file" id="audio-${asset.id}" accept="audio/*" style="display:none"
+                                       onchange="handleAudioUpload(event, '${asset.id}', '${asset.filename}')">
+                                <div class="upload-icon">🎵</div>
+                                <div class="upload-text">Click to upload audio</div>
+                            </div>
+                            <div class="asset-actions" style="margin-top: 10px;">
+                                <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'audio')">Prompt</button>
+                            </div>
+                        `}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // ============================================================================
+        // UPLOAD HANDLERS
+        // ============================================================================
+        function triggerImageUpload(assetId) {
+            document.getElementById(`upload-${assetId}`).click();
+        }
+
+        async function handleImageUpload(event, assetId) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            let asset = null;
+            let filename = file.name;
+            for (const category of Object.values(imageDatabase)) {
+                const found = category.assets.find(a => a.id === assetId);
+                if (found) { asset = found; filename = found.filename; break; }
+            }
+
+            let serverUploadSuccess = false;
+            let serverPath = asset ? asset.path + filename : null;
+
+            // Upload to server
+            try {
+                const formData = new FormData();
+                formData.append('assetId', assetId);
+                formData.append('filename', filename);
+                formData.append('file', file, filename);
+                const response = await fetch(`${UPLOAD_SERVER}/upload`, { method: 'POST', body: formData });
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(`Saved to ${result.path || serverPath}`);
+                    serverUploadSuccess = true;
+                    serverPath = result.path || serverPath;
+                }
+            } catch (err) {
+                console.warn('Server upload failed, saving locally only');
+            }
+
+            // If server upload succeeded, use the file path; otherwise use base64
+            if (serverUploadSuccess && serverPath) {
+                // Use the server file path for consistency
+                uploadedImages[assetId] = serverPath;
+                await saveAsset('images', assetId, serverPath);
+                renderImageTabs();
+                renderImages();
+                updateProgress();
+            } else {
+                // Fallback to IndexedDB with base64
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    uploadedImages[assetId] = e.target.result;
+                    await saveAsset('images', assetId, e.target.result);
+                    renderImageTabs();
+                    renderImages();
+                    updateProgress();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function handleAudioUpload(event, assetId, filename) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            const finalFilename = filename.replace(/\.[^.]+$/, `.${ext}`);
+
+            // Upload to server
+            try {
+                const formData = new FormData();
+                formData.append('file', file, finalFilename);
+                formData.append('assetId', assetId);
+                formData.append('filename', finalFilename);
+                const response = await fetch(`${UPLOAD_SERVER}/upload-audio`, { method: 'POST', body: formData });
+                if (response.ok) {
+                    showToast(`Saved audio: ${finalFilename}`);
+                }
+            } catch (err) {
+                console.warn('Server upload failed');
+            }
+
+            uploadedAudio[assetId] = { filename: finalFilename, path: `assets/audio/${finalFilename}` };
+            await saveAsset('audio', assetId, uploadedAudio[assetId]);
+            renderAudioTabs();
+            renderAudio();
+            updateProgress();
+        }
+
+        // ============================================================================
+        // REMOVE HANDLERS
+        // ============================================================================
+        async function removeImage(assetId, filename) {
+            try {
+                await fetch(`${UPLOAD_SERVER}/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assetId, filename })
+                });
+            } catch (err) { console.warn('Server delete failed'); }
+
+            delete uploadedImages[assetId];
+            await deleteAsset('images', assetId);
+            renderImageTabs();
+            renderImages();
+            updateProgress();
+            showToast(`Removed ${filename}`, true);
+        }
+
+        async function removeAudio(assetId, filename) {
+            try {
+                await fetch(`${UPLOAD_SERVER}/delete-audio`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assetId, filename })
+                });
+            } catch (err) { console.warn('Server delete failed'); }
+
+            delete uploadedAudio[assetId];
+            await deleteAsset('audio', assetId);
+            renderAudioTabs();
+            renderAudio();
+            updateProgress();
+            showToast(`Removed ${filename}`, true);
+        }
+
+        // ============================================================================
+        // PROMPT MODAL
+        // ============================================================================
+        function showPrompt(assetId, type) {
+            let asset = null;
+            const db = type === 'image' ? imageDatabase : audioDatabase;
+            for (const category of Object.values(db)) {
+                asset = category.assets.find(a => a.id === assetId);
+                if (asset) break;
+            }
+            if (asset && asset.prompt) {
+                currentPrompt = asset.prompt;
+                document.getElementById('promptTitle').textContent = `AI Prompt: ${asset.name}`;
+                document.getElementById('promptDescription').textContent = asset.description || '';
+                document.getElementById('promptText').textContent = asset.prompt;
+                document.getElementById('promptModal').classList.remove('hidden');
+            }
+        }
+
+        function closePromptModal() {
+            document.getElementById('promptModal').classList.add('hidden');
+        }
+
+        function copyPrompt() {
+            navigator.clipboard.writeText(currentPrompt).then(() => {
+                showToast('Prompt copied to clipboard!');
+                closePromptModal();
+            });
+        }
+
+        // ============================================================================
+        // PROGRESS & STATS
+        // ============================================================================
+        function updateProgress() {
+            let totalImages = 0, uploadedImgCount = 0;
+            let totalAudio = 0, uploadedAudioCount = 0;
+
+            Object.values(imageDatabase).forEach(cat => {
+                totalImages += cat.assets.length;
+                uploadedImgCount += cat.assets.filter(a => uploadedImages[a.id]).length;
+            });
+
+            Object.values(audioDatabase).forEach(cat => {
+                totalAudio += cat.assets.length;
+                uploadedAudioCount += cat.assets.filter(a => uploadedAudio[a.id]).length;
+            });
+
+            const total = totalImages + totalAudio;
+            const uploaded = uploadedImgCount + uploadedAudioCount;
+            const percentage = total > 0 ? Math.round((uploaded / total) * 100) : 0;
+
+            document.getElementById('progressFill').style.width = `${percentage}%`;
+            document.getElementById('progressText').textContent = `${uploaded} / ${total} Assets (${percentage}%)`;
+            document.getElementById('statUploaded').textContent = uploaded;
+            document.getElementById('statPending').textContent = total - uploaded;
+            document.getElementById('statImages').textContent = `${uploadedImgCount}/${totalImages}`;
+            document.getElementById('statAudio').textContent = `${uploadedAudioCount}/${totalAudio}`;
+            document.getElementById('imageCount').textContent = `${uploadedImgCount}/${totalImages}`;
+            document.getElementById('audioCount').textContent = `${uploadedAudioCount}/${totalAudio}`;
+        }
+
+        // ============================================================================
+        // UTILITIES
+        // ============================================================================
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${isError ? 'error' : ''}`;
+            setTimeout(() => { toast.classList.add('hidden'); }, 3000);
+        }
+
+        function exportStatus() {
+            const status = {
+                exportDate: new Date().toISOString(),
+                images: {},
+                audio: {}
+            };
+            Object.entries(imageDatabase).forEach(([catKey, category]) => {
+                status.images[catKey] = category.assets.map(a => ({
+                    id: a.id, name: a.name, uploaded: !!uploadedImages[a.id]
+                }));
+            });
+            Object.entries(audioDatabase).forEach(([catKey, category]) => {
+                status.audio[catKey] = category.assets.map(a => ({
+                    id: a.id, name: a.name, uploaded: !!uploadedAudio[a.id]
+                }));
+            });
+            const blob = new Blob([JSON.stringify(status, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'dragon-run-asset-status.json';
+            a.click();
+            showToast('Progress exported!');
+        }
+
+        function downloadAllPrompts() {
+            let content = '# Dragon Run: AI Prompts\n\n';
+            content += '## IMAGE ASSETS\n\n';
+            Object.entries(imageDatabase).forEach(([catKey, category]) => {
+                content += `### ${category.name}\n\n`;
+                category.assets.forEach(asset => {
+                    content += `#### ${asset.name}\nFile: ${asset.filename}\n\n${asset.prompt}\n\n---\n\n`;
+                });
+            });
+            content += '\n## AUDIO ASSETS\n\n';
+            Object.entries(audioDatabase).forEach(([catKey, category]) => {
+                content += `### ${category.name}\n\n`;
+                category.assets.forEach(asset => {
+                    content += `#### ${asset.name}\nFile: ${asset.filename}\n\n${asset.prompt}\n\n---\n\n`;
+                });
+            });
+            const blob = new Blob([content], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'dragon-run-all-prompts.txt';
+            a.click();
+            showToast('All prompts downloaded!');
+        }
+
+        async function confirmClearAll() {
+            if (confirm('Clear all local tracking data? (Files on disk will remain)')) {
+                if (db) {
+                    const tx = db.transaction(['images', 'audio'], 'readwrite');
+                    tx.objectStore('images').clear();
+                    tx.objectStore('audio').clear();
+                }
+                uploadedImages = {};
+                uploadedAudio = {};
+                renderImageTabs();
+                renderAudioTabs();
+                renderImages();
+                renderAudio();
+                updateProgress();
+                showToast('Local data cleared!');
+            }
+        }
+
+        // Close modal on escape or background click
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePromptModal(); });
+        document.getElementById('promptModal').addEventListener('click', (e) => {
+            if (e.target.id === 'promptModal') closePromptModal();
+        });
+    </script>
+</body>
+</html>

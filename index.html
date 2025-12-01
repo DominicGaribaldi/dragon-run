@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon Run: The Royal Race</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!--
+        DRAGON RUN: THE ROYAL RACE
+        A PvP Digital Board Game with Fantasy Metal Slug Aesthetic
+
+        Game Container - Phaser 3 will inject the canvas here
+    -->
+    <div id="game-container"></div>
+
+    <!-- Phaser 3 via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+
+    <!-- Game Scripts - Order matters for class dependencies -->
+    <!-- Data definitions (no dependencies) -->
+    <script src="js/CharacterData.js"></script>
+    <script src="js/ItemData.js"></script>
+    <script src="js/EncounterData.js"></script>
+
+    <!-- Core systems -->
+    <script src="js/Inventory.js"></script>
+    <script src="js/ProceduralGraphics.js"></script>
+    <script src="js/GameUI.js"></script>
+
+    <!-- Game objects -->
+    <script src="js/Board.js"></script>
+    <script src="js/Player.js"></script>
+
+    <!-- Main game -->
+    <script src="js/game.js"></script>
+</body>
+</html>

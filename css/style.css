@@ -1,0 +1,77 @@
+/*
+    DRAGON RUN: THE ROYAL RACE
+    Main Stylesheet
+
+    Fantasy Metal Slug Aesthetic - Dark medieval theme with gold accents
+*/
+
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    /* Dark fantasy background - swap for textured image later */
+    background: linear-gradient(135deg, #1a0a0a 0%, #2d1810 50%, #1a0a0a 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+}
+
+/* Game container - fills the browser window */
+#game-container {
+    /* Royal gold border - 4px solid with beveled effect */
+    border: 4px solid #c9a227;
+    border-radius: 4px;
+    box-shadow:
+        /* Outer glow - dragon fire effect */
+        0 0 20px rgba(201, 162, 39, 0.5),
+        /* Inner shadow for depth */
+        inset 0 0 10px rgba(0, 0, 0, 0.8),
+        /* Drop shadow */
+        0 10px 30px rgba(0, 0, 0, 0.7);
+
+    /* Fill the browser window */
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+
+    /* Decorative corner accents - can add pseudo-elements later for Metal Slug style corners */
+}
+
+/* Optional: Add decorative corners for full Metal Slug aesthetic */
+#game-container::before,
+#game-container::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #ffd700;
+}
+
+#game-container::before {
+    top: -8px;
+    left: -8px;
+    border-right: none;
+    border-bottom: none;
+}
+
+#game-container::after {
+    bottom: -8px;
+    right: -8px;
+    border-left: none;
+    border-top: none;
+}
+
+/*
+    ASSET SWAP NOTES:
+    -----------------
+    1. Replace body background with: url('../assets/images/bg_stone_texture.png')
+    2. Add custom font: @font-face for fantasy pixel font
+    3. Add animated border: Use sprite sheet for glowing dragon scale border
+*/
