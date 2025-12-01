@@ -201,3 +201,4 @@ class Inventory {
         this.items = data.items || [];
     }
 }
+

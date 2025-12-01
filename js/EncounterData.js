@@ -450,3 +450,4 @@ const EncounterData = {
         };
     }
 };
+

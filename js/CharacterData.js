@@ -143,7 +143,7 @@ const CharacterData = {
                 defense: 1,
                 magic: 2,
                 agility: 2,
-                charisma: 3,
+                charisma: 2,
                 engineering: 1,
                 luck: 5
             },
@@ -173,3 +173,4 @@ const CharacterData = {
         return Object.keys(this.characters);
     }
 };
+

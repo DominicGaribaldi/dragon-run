@@ -303,8 +303,6 @@ class ProceduralGraphics {
         let markerKey = null;
         if (type === 'knight' && this.scene.textures.exists('tile_marker_knight')) {
             markerKey = 'tile_marker_knight';
-        } else if (type === 'dragon' && this.scene.textures.exists('tile_marker_dragon')) {
-            markerKey = 'tile_marker_dragon';
         } else if (type === 'encounter' && this.scene.textures.exists('tile_marker_encounter')) {
             markerKey = 'tile_marker_encounter';
         } else if (type === 'special') {

@@ -513,10 +513,29 @@ class Board {
                 }
             }
 
+            // Absolute last resort: if still no moves, find ANY empty cell
+            if (validMoves.length === 0) {
+                for (let searchY = 0; searchY < gridHeight; searchY++) {
+                    for (let searchX = 0; searchX < gridWidth; searchX++) {
+                        if (!grid.has(gridKey(searchX, searchY))) {
+                            validMoves.push({ dir: directions[2], gx: searchX, gy: searchY, weight: 1 });
+                            break;
+                        }
+                    }
+                    if (validMoves.length > 0) break;
+                }
+            }
+
             // Weighted random selection
             const totalWeight = validMoves.reduce((sum, m) => sum + m.weight, 0);
             let random = Math.random() * totalWeight;
             let chosen = validMoves[0];
+
+            // Safety check - if still no moves, something is very wrong
+            if (!chosen) {
+                console.error('[Board] Path generation failed - no valid moves at tile', tileNum);
+                break;
+            }
 
             for (const move of validMoves) {
                 random -= move.weight;

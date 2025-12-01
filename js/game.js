@@ -251,7 +251,7 @@ function preload() {
     // Load background images
     this.load.image('bg_title', 'assets/images/backgrounds/bg_title_screen.png');
     this.load.image('bg_causeway', 'assets/images/backgrounds/bg_causeway_main.png');
-    this.load.image('bg_board', 'assets/images/backgrounds/bg_board_illustrated.png');
+    this.load.image('bg_board', 'assets/images/backgrounds/bg_causeway_main.png');
 
     // Load character sprite sheets (4x4 grid, all 256x256 = 64px frames)
     const charFrameConfig = { frameWidth: 64, frameHeight: 64 };
@@ -323,8 +323,7 @@ function preload() {
     this.load.image('tile_start', 'assets/images/tiles/tile_start.png');
     this.load.image('tile_finish', 'assets/images/tiles/tile_finish.png');
     this.load.image('tile_marker_knight', 'assets/images/tiles/tile_marker_knight.png');
-    this.load.image('tile_marker_dragon', 'assets/images/tiles/tile_marker_dragon.png');
-    this.load.image('tile_marker_encounter', 'assets/images/tiles/tile_marker_encounter.png');
+    this.load.image('tile_marker_encounter', 'assets/images/tiles/tile_marker_special.png');
     // Single marker for all special/bonus tiles (chests, portals, anvil)
     this.load.image('tile_marker_special', 'assets/images/tiles/tile_marker_special.png');
     // Elemental tiles (near dragons)
@@ -909,36 +908,130 @@ function startCharacterSelection() {
         strokeThickness: 4
     }).setOrigin(0.5).setDepth(101).setName('selectTitle').setScrollFactor(0);
 
-    const playerCountText = this.add.text(centerX, 100, 'How many players?', {
-        fontSize: '20px',
-        fontFamily: 'Arial',
-        color: '#ffffff'
-    }).setOrigin(0.5).setDepth(101).setName('playerCountText').setScrollFactor(0);
+    // Create polished player count panel - centered on screen
+    const panelW = 400;
+    const panelH = 280;
+    const panelX = centerX;
+    const panelY = centerY;
 
-    // Player count buttons - centered dynamically
+    // Outer glow effect
+    const glow = this.add.graphics();
+    glow.fillStyle(0xc9a227, 0.15);
+    glow.fillRoundedRect(panelX - panelW/2 - 15, panelY - panelH/2 - 15, panelW + 30, panelH + 30, 24);
+    glow.fillStyle(0xc9a227, 0.08);
+    glow.fillRoundedRect(panelX - panelW/2 - 25, panelY - panelH/2 - 25, panelW + 50, panelH + 50, 32);
+    glow.setDepth(101);
+    glow.setScrollFactor(0);
+    glow.setName('playerCountGlow');
+
+    // Panel background
+    const panelBg = this.add.graphics();
+    panelBg.fillStyle(0x0d0d1a, 1);
+    panelBg.fillRoundedRect(panelX - panelW/2, panelY - panelH/2, panelW, panelH, 16);
+    panelBg.fillStyle(0x1a1a2e, 0.5);
+    panelBg.fillRoundedRect(panelX - panelW/2 + 4, panelY - panelH/2 + 4, panelW - 8, panelH/3, 14);
+    panelBg.lineStyle(3, 0xc9a227, 1);
+    panelBg.strokeRoundedRect(panelX - panelW/2, panelY - panelH/2, panelW, panelH, 16);
+    panelBg.lineStyle(1, 0xc9a227, 0.3);
+    panelBg.strokeRoundedRect(panelX - panelW/2 + 6, panelY - panelH/2 + 6, panelW - 12, panelH - 12, 12);
+    panelBg.setDepth(102);
+    panelBg.setScrollFactor(0);
+    panelBg.setName('playerCountPanel');
+
+    // Panel title
+    const panelTitle = this.add.text(panelX, panelY - panelH/2 + 50, 'HOW MANY PLAYERS?', {
+        fontSize: '24px',
+        fontFamily: 'Georgia, serif',
+        color: '#c9a227',
+        stroke: '#000000',
+        strokeThickness: 3
+    }).setOrigin(0.5).setDepth(103).setScrollFactor(0).setName('playerCountText');
+
+    // Create polished buttons
     const scene = this;
-    for (let i = 2; i <= 4; i++) {
-        const btn = this.add.text(centerX - 100 + ((i-2) * 100), 150, `${i} Players`, {
-            fontSize: '18px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            backgroundColor: '#457B9D',
-            padding: { x: 15, y: 10 }
-        }).setOrigin(0.5).setDepth(101).setName(`playerCountBtn${i}`).setScrollFactor(0);
+    const buttonY = panelY + 30;
+    const buttonSpacing = 110;
+    const startX = panelX - buttonSpacing;
 
-        btn.setInteractive({ useHandCursor: true });
-        btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#5A9BBD' }));
-        btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#457B9D' }));
-        btn.on('pointerdown', () => {
+    for (let i = 2; i <= 4; i++) {
+        const btnX = startX + ((i - 2) * buttonSpacing);
+        const btnW = 90;
+        const btnH = 80;
+
+        // Button background graphics
+        const btnBg = this.add.graphics();
+        btnBg.fillStyle(0x0a0a12, 1);
+        btnBg.fillRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+        btnBg.fillStyle(0xc9a227, 0.15);
+        btnBg.fillRoundedRect(btnX - btnW/2 + 2, buttonY - btnH/2 + 2, btnW - 4, btnH - 4, 10);
+        btnBg.lineStyle(2, 0xc9a227, 1);
+        btnBg.strokeRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+        btnBg.setDepth(103);
+        btnBg.setScrollFactor(0);
+        btnBg.setName(`playerCountBtnBg${i}`);
+
+        // Large number
+        const numText = this.add.text(btnX, buttonY - 10, `${i}`, {
+            fontSize: '36px',
+            fontFamily: 'Georgia, serif',
+            color: '#ffffff',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5).setDepth(104).setScrollFactor(0).setName(`playerCountNum${i}`);
+
+        // "Players" label
+        const labelText = this.add.text(btnX, buttonY + 25, 'Players', {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        }).setOrigin(0.5).setDepth(104).setScrollFactor(0).setName(`playerCountLabel${i}`);
+
+        // Hit area for interaction
+        const hitArea = this.add.rectangle(btnX, buttonY, btnW, btnH, 0x000000, 0);
+        hitArea.setDepth(105);
+        hitArea.setScrollFactor(0);
+        hitArea.setInteractive({ useHandCursor: true });
+        hitArea.setName(`playerCountBtn${i}`);
+
+        // Hover effects
+        hitArea.on('pointerover', () => {
+            btnBg.clear();
+            btnBg.fillStyle(0x1a1a24, 1);
+            btnBg.fillRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+            btnBg.fillStyle(0xc9a227, 0.35);
+            btnBg.fillRoundedRect(btnX - btnW/2 + 2, buttonY - btnH/2 + 2, btnW - 4, btnH - 4, 10);
+            btnBg.lineStyle(3, 0xc9a227, 1);
+            btnBg.strokeRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+            numText.setScale(1.1);
+        });
+
+        hitArea.on('pointerout', () => {
+            btnBg.clear();
+            btnBg.fillStyle(0x0a0a12, 1);
+            btnBg.fillRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+            btnBg.fillStyle(0xc9a227, 0.15);
+            btnBg.fillRoundedRect(btnX - btnW/2 + 2, buttonY - btnH/2 + 2, btnW - 4, btnH - 4, 10);
+            btnBg.lineStyle(2, 0xc9a227, 1);
+            btnBg.strokeRoundedRect(btnX - btnW/2, buttonY - btnH/2, btnW, btnH, 12);
+            numText.setScale(1);
+        });
+
+        hitArea.on('pointerdown', () => {
             // Play button click sound
             if (audioManager) {
                 audioManager.playSFX('sfx_button_click');
             }
             numberOfPlayers = i;
-            // Remove player count UI
-            scene.children.getByName('playerCountText').destroy();
+            // Remove player count UI elements
+            scene.children.getByName('playerCountGlow')?.destroy();
+            scene.children.getByName('playerCountPanel')?.destroy();
+            scene.children.getByName('playerCountText')?.destroy();
             for (let j = 2; j <= 4; j++) {
-                scene.children.getByName(`playerCountBtn${j}`).destroy();
+                scene.children.getByName(`playerCountBtnBg${j}`)?.destroy();
+                scene.children.getByName(`playerCountNum${j}`)?.destroy();
+                scene.children.getByName(`playerCountLabel${j}`)?.destroy();
+                scene.children.getByName(`playerCountBtn${j}`)?.destroy();
             }
             // Start selecting characters
             selectCharacterForPlayer.call(scene, 1);
