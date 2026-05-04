@@ -3,6 +3,7 @@
  */
 
 import { GameRoom } from './GameRoom.js';
+import { randomInt } from 'crypto';
 
 export class RoomManager {
     constructor(io) {
@@ -12,7 +13,9 @@ export class RoomManager {
     }
 
     /**
-     * Generate a unique 4-character room code
+     * Generate a unique 4-character room code using crypto-strong RNG.
+     * Math.random() is predictable from a few outputs; an attacker who can
+     * observe a couple of room codes should not be able to predict the next.
      */
     generateRoomCode() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars (0,O,1,I)
@@ -21,7 +24,7 @@ export class RoomManager {
         do {
             code = '';
             for (let i = 0; i < 4; i++) {
-                code += chars[Math.floor(Math.random() * chars.length)];
+                code += chars[randomInt(0, chars.length)];
             }
             attempts++;
         } while (this.rooms.has(code) && attempts < 100);
@@ -40,12 +43,12 @@ export class RoomManager {
 
         const roomCode = this.generateRoomCode();
         const room = new GameRoom(roomCode, hostSocketId);
-        room.addPlayer(hostSocketId, playerName, true);
+        const { reconnectToken } = room.addPlayer(hostSocketId, playerName, true);
 
         this.rooms.set(roomCode, room);
         this.socketToRoom.set(hostSocketId, roomCode);
 
-        return { success: true, roomCode };
+        return { success: true, roomCode, reconnectToken };
     }
 
     /**
@@ -70,13 +73,14 @@ export class RoomManager {
             return { success: false, error: 'Room is full' };
         }
 
-        const playerNumber = room.addPlayer(socketId, playerName, false);
+        const { playerNumber, reconnectToken } = room.addPlayer(socketId, playerName, false);
         this.socketToRoom.set(socketId, roomCode);
 
         return {
             success: true,
             roomCode,
             playerNumber,
+            reconnectToken,
             players: room.getPlayersInfo(),
             gameState: room.gameState
         };
@@ -359,15 +363,17 @@ export class RoomManager {
     }
 
     /**
-     * Handle reconnection attempt
+     * Handle reconnection attempt. The reconnectToken is required — it was
+     * issued at addPlayer time and is the only way to prove ownership of a
+     * disconnected player's seat.
      */
-    handleReconnect(socketId, roomCode, playerNumber) {
+    handleReconnect(socketId, roomCode, playerNumber, reconnectToken) {
         const room = this.rooms.get(roomCode);
         if (!room) {
             return { success: false, error: 'Room not found' };
         }
 
-        const result = room.reconnectPlayer(socketId, playerNumber);
+        const result = room.reconnectPlayer(socketId, playerNumber, reconnectToken);
         if (result.success) {
             this.socketToRoom.set(socketId, roomCode);
             return {

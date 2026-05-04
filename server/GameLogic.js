@@ -41,20 +41,21 @@ export class GameLogic {
      * Returns board data that can be sent to all clients
      */
     generateBoard() {
-        const seed = Date.now();
+        // Use a private seed for server-side procedural generation. The seed
+        // itself is NEVER returned to clients — exposing it would let clients
+        // predict every future RNG draw made from the same seed.
+        const seed = Date.now() ^ Math.floor(Math.random() * 0x7fffffff);
         const rng = this.seededRandom(seed);
 
-        // Generate procedural assignments matching client's Board.js logic
-        const assignments = {
-            seed,
+        // Generate procedural assignments matching client's Board.js logic.
+        // We send only the resolved tile assignments, not the seed.
+        return {
             dragons: this.assignDragons(rng),
             knights: this.assignKnights(rng),
             monsters: this.assignMonsters(rng),
             specials: this.assignSpecials(rng),
             portals: this.assignPortals(rng)
         };
-
-        return assignments;
     }
 
     /**

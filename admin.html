@@ -1299,6 +1299,54 @@
         let db = null;
 
         const UPLOAD_SERVER = 'http://localhost:3002';
+        const TOKEN_STORAGE_KEY = 'dragonRunAdminToken';
+
+        // ----------------------------------------------------------------------------
+        // SECURITY HELPERS
+        // ----------------------------------------------------------------------------
+        // jsAttr: emit a JSON-encoded JS string safe to interpolate inside an HTML
+        // attribute (e.g. onclick="fn(${jsAttr(x)})"). Wraps the value in quotes
+        // and escapes the HTML-special characters that could break out of the attr.
+        function jsAttr(s) {
+            return JSON.stringify(String(s))
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getAdminToken() {
+            return localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+        }
+
+        function promptForAdminToken(reason) {
+            const message = reason
+                ? `${reason}\n\nPaste your ADMIN_TOKEN to continue (will be stored in this browser only):`
+                : 'Paste your ADMIN_TOKEN to continue (will be stored in this browser only):';
+            const token = window.prompt(message, getAdminToken());
+            if (token !== null && token.trim() !== '') {
+                localStorage.setItem(TOKEN_STORAGE_KEY, token.trim());
+                return token.trim();
+            }
+            return null;
+        }
+
+        // apiFetch: wrapper around fetch() that injects X-Admin-Token. On a 401,
+        // prompts the user once for a fresh token and retries.
+        async function apiFetch(url, opts = {}) {
+            const headers = Object.assign({}, opts.headers || {});
+            const token = getAdminToken();
+            if (token) headers['X-Admin-Token'] = token;
+            let response = await fetch(url, Object.assign({}, opts, { headers }));
+            if (response.status === 401) {
+                const fresh = promptForAdminToken('The admin token was rejected by the upload server.');
+                if (!fresh) return response;
+                headers['X-Admin-Token'] = fresh;
+                response = await fetch(url, Object.assign({}, opts, { headers }));
+            }
+            return response;
+        }
 
         // ============================================================================
         // INITIALIZATION
@@ -1316,17 +1364,21 @@
             checkUploadServer();
         });
 
-        // Check upload server status
+        // Check upload server status. If it reports authMode: 'token', make sure
+        // a token is available before any uploads are attempted.
         async function checkUploadServer() {
             const statusEl = document.getElementById('serverStatus');
             try {
                 const response = await fetch(`${UPLOAD_SERVER}/status`, { timeout: 2000 });
-                if (response.ok) {
-                    statusEl.className = 'online';
-                    statusEl.textContent = 'Upload server connected - files saved to disk';
-                } else {
-                    throw new Error('Server not responding');
+                if (!response.ok) throw new Error('Server not responding');
+                const status = await response.json().catch(() => ({}));
+                if (status.authMode === 'token' && !getAdminToken()) {
+                    promptForAdminToken('The upload server is running in token-auth mode.');
                 }
+                statusEl.className = 'online';
+                statusEl.textContent = status.authMode === 'token'
+                    ? 'Upload server connected (token auth) - files saved to disk'
+                    : 'Upload server connected (loopback only) - files saved to disk';
             } catch (err) {
                 statusEl.className = 'offline';
                 statusEl.textContent = 'Upload server offline - run: node upload-server.js';
@@ -1521,13 +1573,13 @@
                         <div class="asset-dimensions">${asset.dimensions}</div>
                         <div class="asset-actions">
                             ${isUploaded
-                                ? `<button class="btn btn-remove" onclick="removeImage('${asset.id}', '${asset.filename}')">Remove</button>`
-                                : `<button class="btn btn-upload" onclick="triggerImageUpload('${asset.id}')">Upload</button>`
+                                ? `<button class="btn btn-remove" onclick="removeImage(${jsAttr(asset.id)}, ${jsAttr(asset.filename)})">Remove</button>`
+                                : `<button class="btn btn-upload" onclick="triggerImageUpload(${jsAttr(asset.id)})">Upload</button>`
                             }
-                            <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'image')">Prompt</button>
+                            <button class="btn btn-prompt" onclick="showPrompt(${jsAttr(asset.id)}, 'image')">Prompt</button>
                         </div>
                     </div>
-                    <input type="file" class="upload-input" id="upload-${asset.id}" accept="image/*" onchange="handleImageUpload(event, '${asset.id}')">
+                    <input type="file" class="upload-input" id="upload-${asset.id}" accept="image/*" onchange="handleImageUpload(event, ${jsAttr(asset.id)})">
                 `;
                 grid.appendChild(card);
             });
@@ -1555,18 +1607,18 @@
                                 </audio>
                             </div>
                             <div class="asset-actions">
-                                <button class="btn btn-remove" onclick="removeAudio('${asset.id}', '${asset.filename}')">Remove</button>
-                                <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'audio')">Prompt</button>
+                                <button class="btn btn-remove" onclick="removeAudio(${jsAttr(asset.id)}, ${jsAttr(asset.filename)})">Remove</button>
+                                <button class="btn btn-prompt" onclick="showPrompt(${jsAttr(asset.id)}, 'audio')">Prompt</button>
                             </div>
                         ` : `
                             <div class="upload-area" onclick="document.getElementById('audio-${asset.id}').click()">
                                 <input type="file" id="audio-${asset.id}" accept="audio/*" style="display:none"
-                                       onchange="handleAudioUpload(event, '${asset.id}', '${asset.filename}')">
+                                       onchange="handleAudioUpload(event, ${jsAttr(asset.id)}, ${jsAttr(asset.filename)})">
                                 <div class="upload-icon">🎵</div>
                                 <div class="upload-text">Click to upload audio</div>
                             </div>
                             <div class="asset-actions" style="margin-top: 10px;">
-                                <button class="btn btn-prompt" onclick="showPrompt('${asset.id}', 'audio')">Prompt</button>
+                                <button class="btn btn-prompt" onclick="showPrompt(${jsAttr(asset.id)}, 'audio')">Prompt</button>
                             </div>
                         `}
                     </div>
@@ -1602,7 +1654,7 @@
                 formData.append('assetId', assetId);
                 formData.append('filename', filename);
                 formData.append('file', file, filename);
-                const response = await fetch(`${UPLOAD_SERVER}/upload`, { method: 'POST', body: formData });
+                const response = await apiFetch(`${UPLOAD_SERVER}/upload`, { method: 'POST', body: formData });
                 if (response.ok) {
                     const result = await response.json();
                     showToast(`Saved to ${result.path || serverPath}`);
@@ -1648,7 +1700,7 @@
                 formData.append('file', file, finalFilename);
                 formData.append('assetId', assetId);
                 formData.append('filename', finalFilename);
-                const response = await fetch(`${UPLOAD_SERVER}/upload-audio`, { method: 'POST', body: formData });
+                const response = await apiFetch(`${UPLOAD_SERVER}/upload-audio`, { method: 'POST', body: formData });
                 if (response.ok) {
                     showToast(`Saved audio: ${finalFilename}`);
                 }
@@ -1667,8 +1719,9 @@
         // REMOVE HANDLERS
         // ============================================================================
         async function removeImage(assetId, filename) {
+            if (!confirm(`Remove ${filename}?\n\nThis deletes the file from disk and clears the local cache.`)) return;
             try {
-                await fetch(`${UPLOAD_SERVER}/delete`, {
+                await apiFetch(`${UPLOAD_SERVER}/delete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ assetId, filename })
@@ -1684,8 +1737,9 @@
         }
 
         async function removeAudio(assetId, filename) {
+            if (!confirm(`Remove ${filename}?\n\nThis deletes the file from disk and clears the local cache.`)) return;
             try {
-                await fetch(`${UPLOAD_SERVER}/delete-audio`, {
+                await apiFetch(`${UPLOAD_SERVER}/delete-audio`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ assetId, filename })

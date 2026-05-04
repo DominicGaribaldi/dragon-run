@@ -8,6 +8,10 @@ class NetworkManager {
         this.isHost = false;
         this.myPlayerNumber = null;
         this.playerName = 'Player';
+        // Reconnect token issued by the server at room create/join. Required to
+        // reclaim a disconnected seat — without it, anyone with the room code
+        // and player number could hijack a player's session.
+        this.reconnectToken = null;
         this.callbacks = {};
         this.connected = false;
         // Auto-detect server URL: use same host in production, localhost for dev
@@ -76,6 +80,7 @@ class NetworkManager {
             this.roomCode = data.roomCode;
             this.myPlayerNumber = data.playerNumber;
             this.isHost = data.isHost;
+            this.reconnectToken = data.reconnectToken || null;
             this.saveSession();
             this.emit('roomCreated', data);
         });
@@ -84,6 +89,7 @@ class NetworkManager {
             this.roomCode = data.roomCode;
             this.myPlayerNumber = data.playerNumber;
             this.isHost = data.isHost;
+            this.reconnectToken = data.reconnectToken || null;
             this.saveSession();
             this.emit('roomJoined', data);
         });
@@ -142,8 +148,10 @@ class NetworkManager {
             this.emit('portalResult', data);
         });
 
-        // Game end
+        // Game end — clear the reconnect token so a stale entry doesn't try
+        // to rejoin a finished game from another tab/device.
         this.socket.on('game_ended', (data) => {
+            this.clearSession();
             this.emit('gameEnded', data);
         });
 
@@ -266,14 +274,18 @@ class NetworkManager {
     // ==================== Session Management ====================
 
     /**
-     * Save session for reconnection
+     * Save session for reconnection. The reconnectToken is required by the
+     * server to reclaim a disconnected seat. We TTL the entry to 1 hour so
+     * stale tokens don't linger on shared devices.
      */
     saveSession() {
-        if (this.roomCode && this.myPlayerNumber) {
+        if (this.roomCode && this.myPlayerNumber && this.reconnectToken) {
             localStorage.setItem('dragonRunSession', JSON.stringify({
                 roomCode: this.roomCode,
                 playerNumber: this.myPlayerNumber,
-                playerName: this.playerName
+                playerName: this.playerName,
+                reconnectToken: this.reconnectToken,
+                savedAt: Date.now()
             }));
         }
     }
@@ -283,29 +295,54 @@ class NetworkManager {
      */
     clearSession() {
         localStorage.removeItem('dragonRunSession');
+        this.reconnectToken = null;
+    }
+
+    /**
+     * Read a saved session, treating entries older than the TTL as expired.
+     */
+    readSession() {
+        const raw = localStorage.getItem('dragonRunSession');
+        if (!raw) return null;
+        try {
+            const session = JSON.parse(raw);
+            const TTL_MS = 60 * 60 * 1000; // 1 hour
+            if (!session.savedAt || (Date.now() - session.savedAt) > TTL_MS) {
+                this.clearSession();
+                return null;
+            }
+            if (!session.reconnectToken) {
+                this.clearSession();
+                return null;
+            }
+            return session;
+        } catch {
+            this.clearSession();
+            return null;
+        }
     }
 
     /**
      * Attempt to reconnect to previous session
      */
     attemptReconnect() {
-        const saved = localStorage.getItem('dragonRunSession');
-        if (saved) {
-            const session = JSON.parse(saved);
-            this.socket.emit('reconnect_attempt', {
-                roomCode: session.roomCode,
-                playerNumber: session.playerNumber
-            });
-            return true;
-        }
-        return false;
+        const session = this.readSession();
+        if (!session) return false;
+        this.reconnectToken = session.reconnectToken;
+        this.playerName = session.playerName || this.playerName;
+        this.socket.emit('reconnect_attempt', {
+            roomCode: session.roomCode,
+            playerNumber: session.playerNumber,
+            reconnectToken: session.reconnectToken
+        });
+        return true;
     }
 
     /**
-     * Check if there's a saved session
+     * Check if there's a saved (non-expired) session
      */
     hasSavedSession() {
-        return localStorage.getItem('dragonRunSession') !== null;
+        return this.readSession() !== null;
     }
 
     // ==================== Event Subscription ====================

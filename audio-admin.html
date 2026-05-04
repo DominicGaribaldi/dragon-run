@@ -1226,6 +1226,49 @@ Reference: Mario Kart victory, sports game winning sounds`
 
         // Server URL
         const UPLOAD_SERVER = 'http://localhost:3002';
+        const TOKEN_STORAGE_KEY = 'dragonRunAdminToken';
+
+        // ----------------------------------------------------------------------------
+        // SECURITY HELPERS
+        // ----------------------------------------------------------------------------
+        function jsAttr(s) {
+            return JSON.stringify(String(s))
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getAdminToken() {
+            return localStorage.getItem(TOKEN_STORAGE_KEY) || '';
+        }
+
+        function promptForAdminToken(reason) {
+            const message = reason
+                ? `${reason}\n\nPaste your ADMIN_TOKEN to continue (will be stored in this browser only):`
+                : 'Paste your ADMIN_TOKEN to continue (will be stored in this browser only):';
+            const token = window.prompt(message, getAdminToken());
+            if (token !== null && token.trim() !== '') {
+                localStorage.setItem(TOKEN_STORAGE_KEY, token.trim());
+                return token.trim();
+            }
+            return null;
+        }
+
+        async function apiFetch(url, opts = {}) {
+            const headers = Object.assign({}, opts.headers || {});
+            const token = getAdminToken();
+            if (token) headers['X-Admin-Token'] = token;
+            let response = await fetch(url, Object.assign({}, opts, { headers }));
+            if (response.status === 401) {
+                const fresh = promptForAdminToken('The admin token was rejected by the upload server.');
+                if (!fresh) return response;
+                headers['X-Admin-Token'] = fresh;
+                response = await fetch(url, Object.assign({}, opts, { headers }));
+            }
+            return response;
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -1236,18 +1279,20 @@ Reference: Mario Kart victory, sports game winning sounds`
             updateStats();
         });
 
-        // Check if upload server is running
+        // Check if upload server is running. If it reports authMode: 'token',
+        // make sure a token is available before any uploads are attempted.
         async function checkServerStatus() {
             const statusEl = document.getElementById('serverStatus');
             try {
                 const response = await fetch(`${UPLOAD_SERVER}/status`);
-                if (response.ok) {
-                    const data = await response.json();
-                    statusEl.textContent = `Server Online (Port ${data.port})`;
-                    statusEl.className = 'server-status online';
-                } else {
-                    throw new Error('Server error');
+                if (!response.ok) throw new Error('Server error');
+                const data = await response.json().catch(() => ({}));
+                if (data.authMode === 'token' && !getAdminToken()) {
+                    promptForAdminToken('The upload server is running in token-auth mode.');
                 }
+                const authLabel = data.authMode === 'token' ? ' (token auth)' : '';
+                statusEl.textContent = `Server Online (Port ${data.port})${authLabel}`;
+                statusEl.className = 'server-status online';
             } catch (e) {
                 statusEl.textContent = 'Server Offline - Run: node upload-server.js';
                 statusEl.className = 'server-status offline';
@@ -1351,21 +1396,21 @@ Reference: Mario Kart victory, sports game winning sounds`
                     ${asset.loop ? `
                         <div class="loop-toggle">
                             <input type="checkbox" id="loop-${asset.id}"
-                                   onchange="toggleLoop('${asset.id}', this.checked)" checked>
+                                   onchange="toggleLoop(${jsAttr(asset.id)}, this.checked)" checked>
                             <label for="loop-${asset.id}">Loop playback</label>
                         </div>
                     ` : ''}
-                    <button class="btn btn-remove" onclick="removeAudio('${asset.id}', '${asset.filename}')">
+                    <button class="btn btn-remove" onclick="removeAudio(${jsAttr(asset.id)}, ${jsAttr(asset.filename)})">
                         Remove
                     </button>
                 ` : `
                     <div class="upload-area" id="upload-${asset.id}"
-                         ondrop="handleDrop(event, '${asset.id}', '${asset.filename}')"
+                         ondrop="handleDrop(event, ${jsAttr(asset.id)}, ${jsAttr(asset.filename)})"
                          ondragover="handleDragOver(event)"
                          ondragleave="handleDragLeave(event)"
                          onclick="document.getElementById('file-${asset.id}').click()">
                         <input type="file" id="file-${asset.id}" accept="audio/*"
-                               onchange="handleFileSelect(event, '${asset.id}', '${asset.filename}')">
+                               onchange="handleFileSelect(event, ${jsAttr(asset.id)}, ${jsAttr(asset.filename)})">
                         <div class="upload-icon">🎵</div>
                         <div class="upload-text">Drop audio file here or click to upload</div>
                     </div>
@@ -1426,7 +1471,7 @@ Reference: Mario Kart victory, sports game winning sounds`
             try {
                 progressFill.style.width = '50%';
 
-                const response = await fetch(`${UPLOAD_SERVER}/upload-audio`, {
+                const response = await apiFetch(`${UPLOAD_SERVER}/upload-audio`, {
                     method: 'POST',
                     body: formData
                 });
@@ -1479,7 +1524,7 @@ Reference: Mario Kart victory, sports game winning sounds`
             if (!confirm(`Remove ${filename}?`)) return;
 
             try {
-                const response = await fetch(`${UPLOAD_SERVER}/delete-audio`, {
+                const response = await apiFetch(`${UPLOAD_SERVER}/delete-audio`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ assetId, filename })

@@ -3,6 +3,14 @@
  */
 
 import { GameLogic } from './GameLogic.js';
+import { randomInt, randomBytes } from 'crypto';
+
+// Server-authoritative dice. Use crypto.randomInt so an attacker who observes
+// past rolls cannot predict future ones (Math.random() is a Mersenne Twister
+// variant that's trivially recoverable from ~624 outputs).
+function rollDie() {
+    return randomInt(1, 7); // returns 1..6 inclusive
+}
 
 export class GameRoom {
     constructor(roomCode, hostSocketId) {
@@ -20,10 +28,14 @@ export class GameRoom {
     }
 
     /**
-     * Add a player to the room
+     * Add a player to the room. Generates a one-time reconnectToken that
+     * must be supplied by the client to reclaim this seat after a disconnect —
+     * without it, anyone who knows the room code + player number could
+     * hijack the seat (and inventory) of a disconnected player.
      */
     addPlayer(socketId, playerName, isHost) {
         const playerNumber = this.players.size + 1;
+        const reconnectToken = randomBytes(16).toString('hex');
         this.players.set(socketId, {
             socketId,
             playerNumber,
@@ -41,11 +53,12 @@ export class GameRoom {
             armorShards: 0,
             hasWon: false,
             connected: true,
-            arcaneInsightUsed: false
+            arcaneInsightUsed: false,
+            reconnectToken
         });
         this.playerOrder.push(socketId);
         this.lastActivity = Date.now();
-        return playerNumber;
+        return { playerNumber, reconnectToken };
     }
 
     /**
@@ -84,29 +97,41 @@ export class GameRoom {
     }
 
     /**
-     * Reconnect a player
+     * Reconnect a player. Requires the original reconnectToken issued at
+     * addPlayer time — without it, the request is rejected even when the
+     * player number is correct. This closes the seat-hijack vector where
+     * anyone with a room code + player number could take over a disconnected
+     * player's session.
      */
-    reconnectPlayer(socketId, playerNumber) {
+    reconnectPlayer(socketId, playerNumber, reconnectToken) {
+        if (typeof reconnectToken !== 'string' || reconnectToken.length === 0) {
+            return { success: false, error: 'Reconnect token required' };
+        }
         // Find the disconnected player by number
         for (const [oldSocketId, player] of this.players) {
-            if (player.playerNumber === playerNumber && !player.connected) {
-                // Update socket ID
-                player.socketId = socketId;
-                player.connected = true;
-
-                // Update maps
-                this.players.delete(oldSocketId);
-                this.players.set(socketId, player);
-
-                // Update player order
-                const orderIndex = this.playerOrder.indexOf(oldSocketId);
-                if (orderIndex !== -1) {
-                    this.playerOrder[orderIndex] = socketId;
-                }
-
-                this.lastActivity = Date.now();
-                return { success: true };
+            if (player.playerNumber !== playerNumber || player.connected) continue;
+            // Constant-time comparison would be ideal, but reconnectToken is
+            // hex-encoded 16-byte random so timing leaks are immaterial here.
+            if (player.reconnectToken !== reconnectToken) {
+                return { success: false, error: 'Invalid reconnect token' };
             }
+
+            // Update socket ID
+            player.socketId = socketId;
+            player.connected = true;
+
+            // Update maps
+            this.players.delete(oldSocketId);
+            this.players.set(socketId, player);
+
+            // Update player order
+            const orderIndex = this.playerOrder.indexOf(oldSocketId);
+            if (orderIndex !== -1) {
+                this.playerOrder[orderIndex] = socketId;
+            }
+
+            this.lastActivity = Date.now();
+            return { success: true };
         }
         return { success: false, error: 'Player not found or already connected' };
     }
@@ -197,8 +222,8 @@ export class GameRoom {
             };
         }
 
-        // Roll the dice (1-6)
-        const roll = Math.floor(Math.random() * 6) + 1;
+        // Roll the dice (1-6, crypto-strong)
+        const roll = rollDie();
         let modifiedRoll = roll;
         const modifiers = {};
 
@@ -473,8 +498,8 @@ export class GameRoom {
             player.inventory.splice(scrollIndex, 1);
         }
 
-        // New roll
-        const roll = Math.floor(Math.random() * 6) + 1;
+        // New roll (crypto-strong)
+        const roll = rollDie();
         this.pendingRoll = {
             socketId,
             roll,
