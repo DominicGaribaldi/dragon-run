@@ -16,10 +16,10 @@ const EncounterData = {
             title: 'The Swamp Dragon',
             headTile: 32,
             tailTile: 6,
-            description: 'A toxic swamp dragon that spits corrosive acid.',
+            description: 'A sluggish swamp dragon - easiest to evade.',
             defenseCheck: {
-                successMin: 4, // Roll 4-6 to save
-                successMessage: 'You dodge the acid spray!',
+                successMin: 3, // Roll 3-6 to save (67% success) - EASY
+                successMessage: 'You dodge the slow acid spray!',
                 failMessage: 'The acid burns! You slide down to safety...'
             },
             element: 'poison',
@@ -32,9 +32,9 @@ const EncounterData = {
             title: 'The Ice Drake',
             headTile: 62,
             tailTile: 19,
-            description: 'An ancient ice dragon with freezing breath.',
+            description: 'A cunning ice dragon with freezing breath.',
             defenseCheck: {
-                successMin: 4,
+                successMin: 4, // Roll 4-6 to save (50% success) - MEDIUM
                 successMessage: 'You resist the freezing cold!',
                 failMessage: 'Frozen solid! You tumble down the icy path...'
             },
@@ -48,9 +48,9 @@ const EncounterData = {
             title: 'The Fire Dragon',
             headTile: 98,
             tailTile: 75,
-            description: 'The legendary dragon king, guardian of the finish.',
+            description: 'The legendary dragon king - most dangerous of all!',
             defenseCheck: {
-                successMin: 4,
+                successMin: 5, // Roll 5-6 to save (33% success) - HARD
                 successMessage: 'You leap through the flames unscathed!',
                 failMessage: 'The inferno overwhelms you! Back you go...'
             },
@@ -224,10 +224,11 @@ const EncounterData = {
             id: 'rustyAnvil',
             name: 'The Rusty Anvil',
             tile: 50,
-            description: 'An old repair station. Free armor!',
+            description: 'A hidden forge. The blacksmith offers to repair your gear!',
             effect: {
-                type: 'full_armor',
-                message: 'The blacksmith repairs your armor! Gain 3 Armor Shards.'
+                type: 'gain_armor',
+                value: 1,
+                message: 'The blacksmith forges you an Armor Shard!'
             }
         },
 
@@ -239,7 +240,7 @@ const EncounterData = {
             id: 'portalBalanced',
             name: 'Stable Portal',
             title: 'The Safe Passage',
-            tile: 25, // Will be set dynamically
+            tiles: [], // Will be set dynamically (1-3 portals of this type)
             description: 'A calm green portal with predictable outcomes.',
             portalType: 'balanced',
             color: 0x44cc66,
@@ -262,18 +263,21 @@ const EncounterData = {
             id: 'portalRisky',
             name: 'Unstable Rift',
             title: 'The Gambler\'s Gate',
-            tile: 55, // Will be set dynamically
+            tiles: [], // Will be set dynamically (1-3 portals of this type)
             description: 'A volatile purple rift. High risk, high reward!',
             portalType: 'risky',
             color: 0x9944dd,
             spriteKey: 'portal_risky_sheet',
+            // Rebalanced: ~40% good outcomes, ~60% bad outcomes (total weight: 10)
             effects: [
-                { id: 'advance_10', weight: 1, type: 'move', value: 10, message: 'SURGE! Launched forward 10 spaces!' },
+                // Good outcomes (weight 4 total = 40%)
+                { id: 'advance_10', weight: 2, type: 'move', value: 10, message: 'SURGE! Launched forward 10 spaces!' },
                 { id: 'gain_items', weight: 1, type: 'loot', value: 2, message: 'Jackpot! Gain 2 items!' },
                 { id: 'full_armor', weight: 1, type: 'armor', value: 3, message: 'Maximum shields! Gain 3 Armor Shards!' },
+                // Bad outcomes (weight 6 total = 60%)
                 { id: 'retreat_8', weight: 2, type: 'move', value: -8, message: 'BACKFIRE! Thrown back 8 spaces!' },
-                { id: 'lose_item', weight: 2, type: 'lose_item', value: 1, message: 'Dimensional theft! Lose 1 random item.' },
-                { id: 'stun', weight: 2, type: 'status', effect: 'stunned', message: 'Paralyzed! Skip your next turn.' },
+                { id: 'lose_item', weight: 1, type: 'lose_item', value: 1, message: 'Dimensional theft! Lose 1 random item.' },
+                { id: 'stun', weight: 1, type: 'status', effect: 'stunned', message: 'Paralyzed! Skip your next turn.' },
                 { id: 'all_status', weight: 1, type: 'all_status', message: 'Chaos energy! Slowed, burned AND reversed!' },
                 { id: 'retreat_15', weight: 1, type: 'move', value: -15, message: 'CATASTROPHE! Hurled back 15 spaces!' }
             ]
@@ -283,7 +287,7 @@ const EncounterData = {
             id: 'portalChaotic',
             name: 'Chaos Vortex',
             title: 'The Void Gate',
-            tile: 75, // Will be set dynamically
+            tiles: [], // Will be set dynamically (1-3 portals of this type)
             description: 'A swirling red vortex of pure chaos. Anything can happen!',
             portalType: 'chaotic',
             color: 0xdd4444,
@@ -365,12 +369,13 @@ const EncounterData = {
 
     /**
      * Get portal at tile (if any)
+     * Now checks arrays since each portal type can have 1-3 instances
      */
     getPortalAtTile(tile) {
         const portals = ['portalBalanced', 'portalRisky', 'portalChaotic'];
         for (const portalKey of portals) {
             const portal = this.special[portalKey];
-            if (portal && portal.tile === tile) {
+            if (portal && portal.tiles && portal.tiles.includes(tile)) {
                 return portal;
             }
         }
@@ -389,23 +394,52 @@ const EncounterData = {
     },
 
     /**
-     * Pick a random effect from a portal based on weights
+     * Pick a random effect from a portal based on weights.
+     * If a Pippin character is provided, rolls twice and discards the first result
+     * when it is clearly negative (Distraction passive's "+1 portal rolls").
      */
-    rollPortalEffect(portal) {
+    rollPortalEffect(portal, playerCharacter = null) {
         if (!portal || !portal.effects) return null;
 
-        // Calculate total weight
+        let effect = this._weightedPickPortalEffect(portal);
+
+        // Pippin's Distraction: +1 reroll if first portal effect is clearly bad.
+        if (playerCharacter && playerCharacter.id === 'pippin' &&
+            playerCharacter.passive && playerCharacter.passive.portalBonus &&
+            this._isPortalEffectBad(effect)) {
+            effect = this._weightedPickPortalEffect(portal);
+        }
+        return effect;
+    },
+
+    _weightedPickPortalEffect(portal) {
         const totalWeight = portal.effects.reduce((sum, e) => sum + (e.weight || 1), 0);
         let roll = Math.random() * totalWeight;
-
-        // Pick effect based on weight
         for (const effect of portal.effects) {
             roll -= (effect.weight || 1);
-            if (roll <= 0) {
-                return effect;
-            }
+            if (roll <= 0) return effect;
         }
         return portal.effects[portal.effects.length - 1];
+    },
+
+    _isPortalEffectBad(effect) {
+        if (!effect) return false;
+        switch (effect.type) {
+            case 'move':
+                return (effect.value || 0) < 0;
+            case 'lose_item':
+            case 'lose_armor':
+            case 'lose_all_items':
+            case 'status':
+            case 'all_status':
+                return true;
+            case 'move_to':
+                return (effect.value || 0) <= 1;
+            case 'none':
+                return effect.id === 'nothing_bad';
+            default:
+                return false;
+        }
     },
 
     /**
@@ -427,25 +461,35 @@ const EncounterData = {
 
         let success = false;
         let threshold = check.successMin || 4;
+        let modifiedRoll = roll;
+        let bonusApplied = null;
 
-        // Apply Pippin's Distraction ability for monsters
-        if (playerCharacter && playerCharacter.id === 'pippin' && encounter.tile) {
-            threshold = Math.max(threshold - 1, 2); // Lower threshold by 1, min 2
+        // Apply Reginald's Ironclad ability for dragons (+1 to defense roll)
+        if (playerCharacter && playerCharacter.id === 'reginald' && encounter.defenseCheck) {
+            modifiedRoll += 1;
+            bonusApplied = 'Ironclad (+1)';
+        }
+
+        // Apply Pippin's Distraction ability for monsters (succeed on 2-6)
+        if (playerCharacter && playerCharacter.id === 'pippin' && encounter.encounterCheck) {
+            threshold = Math.max(threshold - 2, 2); // Lower threshold by 2, min 2
         }
 
         // Check type
         if (check.type === 'even') {
-            success = roll % 2 === 0;
+            success = modifiedRoll % 2 === 0;
         } else if (check.type === 'odd') {
-            success = roll % 2 === 1;
+            success = modifiedRoll % 2 === 1;
         } else {
-            success = roll >= threshold;
+            success = modifiedRoll >= threshold;
         }
 
         return {
             success,
-            roll,
+            roll: modifiedRoll,
+            originalRoll: roll,
             threshold,
+            bonusApplied,
             message: success ? check.successMessage : check.failMessage
         };
     }

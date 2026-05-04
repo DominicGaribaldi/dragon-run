@@ -348,11 +348,11 @@ function preload() {
     this.load.image('encounter_slimetooth', 'assets/images/encounters/encounter_slimetooth.png');
     this.load.image('encounter_frostfang', 'assets/images/encounters/encounter_frostfang.png');
     this.load.image('encounter_ignis', 'assets/images/encounters/encounter_ignis.png');
-    this.load.image('encounter_hedgeknight', 'assets/images/encounters/encounter_hedgeknight.png');
-    this.load.image('encounter_griffinrider', 'assets/images/encounters/encounter_griffinrider.png');
+    this.load.image('encounter_hedge', 'assets/images/encounters/encounter_hedgeknight.png');
+    this.load.image('encounter_griffin', 'assets/images/encounters/encounter_griffinrider.png');
     this.load.image('encounter_champion', 'assets/images/encounters/encounter_champion.png');
-    this.load.image('encounter_treasure', 'assets/images/encounters/encounter_treasure.png');
-    this.load.image('encounter_anvil', 'assets/images/encounters/encounter_anvil.png');
+    this.load.image('encounter_lootChest', 'assets/images/encounters/encounter_treasure.png');
+    this.load.image('encounter_rustyAnvil', 'assets/images/encounters/encounter_anvil.png');
 
     // Portal encounter images (3 types)
     this.load.image('encounter_portalBalanced', 'assets/images/encounters/encounter_portal_balanced.png');
@@ -909,9 +909,17 @@ function showMainMenu() {
     // Show main menu
     multiplayerUI.showMainMenu((mode) => {
         if (mode === 'local') {
-            // Local game - proceed with character selection
+            // Local game - clean up main menu elements first
             isMultiplayer = false;
             isMyTurn = true;
+
+            // Remove the title background and overlay created by showMainMenu
+            const titleBg = scene.children.getByName('titleBackground');
+            if (titleBg) titleBg.destroy();
+            const overlay = scene.children.getByName('selectOverlay');
+            if (overlay) overlay.destroy();
+
+            // Now proceed with character selection
             startCharacterSelection.call(scene);
         }
         // Online mode is handled by MultiplayerUI
@@ -1421,7 +1429,9 @@ function selectCharacterForPlayer(playerNumber) {
  * Finish character selection and start the game
  */
 function finishCharacterSelection() {
-    console.log('[Game] Character selection complete, starting game...');
+    console.log('[Game] finishCharacterSelection called - starting game...');
+    console.log('[Game] Number of players:', numberOfPlayers);
+    console.log('[Game] Player selections:', playerCharacterSelections);
 
     // Switch to gameplay music
     if (audioManager) {
@@ -1430,17 +1440,37 @@ function finishCharacterSelection() {
 
     // Remove title screen and selection overlay
     const titleBg = this.children.getByName('titleBackground');
+    console.log('[Game] titleBackground found:', !!titleBg);
     if (titleBg) titleBg.destroy();
     const overlay = this.children.getByName('selectOverlay');
+    console.log('[Game] selectOverlay found:', !!overlay);
     if (overlay) overlay.destroy();
     const title = this.children.getByName('selectTitle');
+    console.log('[Game] selectTitle found:', !!title);
     if (title) title.destroy();
+
+    console.log('[Game] Board exists:', !!board);
+    console.log('[Game] Board tiles count:', board ? Object.keys(board.tiles).length : 0);
 
     // Create players with selected characters
     for (let i = 0; i < numberOfPlayers; i++) {
         const characterData = playerCharacterSelections[i];
         const player = new Player(this, i + 1, board, gfx, characterData);
         players.push(player);
+
+        // Apply character-specific starting bonuses
+        if (characterData && characterData.passive) {
+            // Aurelia: Start on tile 5 with 1 item and 2 armor shards
+            if (characterData.id === 'aurelia') {
+                const startTile = characterData.passive.startTile || 5;
+                player.moveTo(startTile, false);
+                player.inventory.addRandomItem();
+                for (let j = 0; j < (characterData.passive.startArmor || 2); j++) {
+                    player.inventory.addItem('armor_shard');
+                }
+                console.log(`[Game] Aurelia starts on tile ${startTile} with 1 item and ${characterData.passive.startArmor || 2} armor shards`);
+            }
+        }
     }
 
     // Set first player as active
@@ -2149,8 +2179,8 @@ function getAbilityName(player) {
 function hasActivatableAbility(player) {
     if (!player || !player.characterData) return false;
 
-    // Elara's Arcane Insight - can be activated before roll (one time)
-    if (player.characterData.id === 'elara' && !player.arcaneInsightUsed) {
+    // Elara's Arcane Insight - can be activated before roll (2 uses per game)
+    if (player.characterData.id === 'elara' && player.arcaneInsightUses > 0) {
         return true;
     }
 
@@ -2303,14 +2333,6 @@ async function handleRollDice() {
 
     const currentPlayer = players[currentPlayerIndex];
 
-    // Check if player can take their turn (might be stunned)
-    if (!currentPlayer.canTakeTurn()) {
-        gameUI.showToast(`${currentPlayer.name} is stunned! Skipping turn...`, 'warning');
-        await delay(1500);
-        nextTurn();
-        return;
-    }
-
     gameState = 'rolling';
     instructionText.setText('Rolling...');
 
@@ -2427,7 +2449,8 @@ async function completeDiceRoll() {
 
             // Use the ability automatically since they activated it
             currentPlayer.useArcaneInsight();
-            gameUI.showToast(`✨ Arcane Insight! Swapped roll ${diceValue} for ${playerBehindRoll}!`, 'success');
+            const usesLeft = currentPlayer.getArcaneInsightUses();
+            gameUI.showToast(`✨ Arcane Insight! Swapped roll ${diceValue} for ${playerBehindRoll}! (+1 next roll, ${usesLeft} uses left)`, 'success');
 
             // Update dice display to show swapped value
             if (diceContainer && diceContainer.valueText) {
@@ -2482,40 +2505,99 @@ function findPlayerBehind(currentPlayer) {
  * Continue after Arcane Insight check (or if not applicable)
  */
 async function continueAfterArcaneInsight(currentPlayer, rollValue) {
-    // Only offer Spell Scroll reroll on bad rolls (1 or 2) - don't interrupt every turn
+    let numericRoll = Number(rollValue);
+
+    // Pippin's Lucky Reroll - auto-reroll 1s or 2s once per game
+    if (currentPlayer.characterData && currentPlayer.characterData.id === 'pippin' &&
+        !currentPlayer.luckyRerollUsed && numericRoll <= 2) {
+        currentPlayer.luckyRerollUsed = true;
+        const newRoll = Math.floor(Math.random() * 6) + 1;
+        gameUI.showToast(`🎲 Lucky Reroll! ${numericRoll} → ${newRoll}!`, 'success');
+        playEffectBurst('sparkle', currentPlayer.token.x, currentPlayer.token.y - 20, 3, 30);
+
+        // Update dice display
+        if (diceContainer && diceContainer.valueText) {
+            diceContainer.valueText.setText(newRoll.toString());
+        }
+        await delay(800);
+        numericRoll = newRoll;
+    }
+
+    // Check if player has Spell Scroll - show timed reroll option on ANY roll
     const hasSpellScroll = currentPlayer.inventory.hasItem('spell_scroll');
-    if (hasSpellScroll && rollValue <= 2) {
-        await offerMovementReroll(currentPlayer, rollValue);
+    console.log(`[SpellScroll] Player ${currentPlayer.name} - hasSpellScroll: ${hasSpellScroll}, rollValue: ${numericRoll}`);
+
+    if (hasSpellScroll) {
+        // Show timed popup - player has 3 seconds to click to use the scroll
+        console.log('[SpellScroll] Showing 3-second reroll window');
+        await offerTimedMovementReroll(currentPlayer, numericRoll);
         return; // The reroll handler will continue the flow
     }
 
     // Continue with normal flow
-    await processMovementRoll(currentPlayer, rollValue);
+    await processMovementRoll(currentPlayer, numericRoll);
 }
 
 /**
- * Offer the player a chance to reroll their movement using Spell Scroll
+ * Offer the player a chance to reroll their movement using Spell Scroll (old modal version)
+ * Returns a Promise that resolves when the reroll choice is complete and movement is processed
  */
-async function offerMovementReroll(player, originalRoll) {
-    gameUI.showRerollChoice(originalRoll, 'movement', async (result) => {
-        let finalRoll = originalRoll;
+function offerMovementReroll(player, originalRoll) {
+    return new Promise((resolve) => {
+        gameUI.showRerollChoice(originalRoll, 'movement', async (result) => {
+            let finalRoll = originalRoll;
 
-        if (result.reroll) {
-            // Use the Spell Scroll
-            player.inventory.useItem('spell_scroll');
-            finalRoll = Math.floor(Math.random() * 6) + 1;
-            gameUI.showToast(`Spell Scroll used! New roll: ${finalRoll}`, 'info');
+            if (result.reroll) {
+                // Use the Spell Scroll
+                player.inventory.useItem('spell_scroll');
+                finalRoll = Math.floor(Math.random() * 6) + 1;
+                gameUI.showToast(`Spell Scroll used! New roll: ${finalRoll}`, 'info');
 
-            // Update dice display
-            if (diceContainer && diceContainer.valueText) {
-                diceContainer.valueText.setText(finalRoll.toString());
+                // Update dice display
+                if (diceContainer && diceContainer.valueText) {
+                    diceContainer.valueText.setText(finalRoll.toString());
+                }
+                updatePlayerStatus();
+                await delay(800);
             }
-            updatePlayerStatus();
-            await delay(800);
-        }
 
-        // Continue with the roll
-        await processMovementRoll(player, finalRoll);
+            // Continue with the roll
+            await processMovementRoll(player, finalRoll);
+            resolve();
+        });
+    });
+}
+
+/**
+ * Offer a timed chance to reroll using Spell Scroll (3-second countdown)
+ * Returns a Promise that resolves when the reroll choice is complete and movement is processed
+ */
+function offerTimedMovementReroll(player, originalRoll) {
+    return new Promise((resolve) => {
+        gameUI.showTimedRerollChoice(originalRoll, 'movement', 3, async (result) => {
+            let finalRoll = originalRoll;
+
+            if (result.reroll) {
+                // Use the Spell Scroll
+                player.inventory.useItem('spell_scroll');
+                finalRoll = Math.floor(Math.random() * 6) + 1;
+                gameUI.showToast(`Spell Scroll used! New roll: ${finalRoll}`, 'success');
+
+                // Update dice display
+                if (diceContainer && diceContainer.valueText) {
+                    diceContainer.valueText.setText(finalRoll.toString());
+                }
+                updatePlayerStatus();
+                await delay(800);
+            } else if (result.expired) {
+                // Timer expired, keeping original roll - no message needed
+                console.log('[SpellScroll] Timer expired, keeping roll:', originalRoll);
+            }
+
+            // Continue with the roll
+            await processMovementRoll(player, finalRoll);
+            resolve();
+        });
     });
 }
 
@@ -2556,6 +2638,13 @@ async function processMovementRoll(currentPlayer, rollValue) {
         currentPlayer.movementBonus = 0; // Clear the bonus after use
     }
 
+    // Apply Elara's Arcane Insight bonus (+1 after using ability)
+    if (currentPlayer.arcaneInsightBonus) {
+        modifiedRoll += currentPlayer.arcaneInsightBonus;
+        gameUI.showToast(`✨ Arcane bonus! +${currentPlayer.arcaneInsightBonus} to roll!`, 'info');
+        currentPlayer.arcaneInsightBonus = 0; // Clear after use
+    }
+
     // Check for Kaelen's Parkour ability (roll of 6 gives choice)
     if (currentPlayer.hasParkourChoice(rollValue)) {
         // Show modal for Parkour choice and wait for selection
@@ -2571,7 +2660,7 @@ async function processMovementRoll(currentPlayer, rollValue) {
             }
 
             // Move the player
-            const result = await currentPlayer.moveSteps(Math.abs(modifiedRoll));
+            const result = await currentPlayer.moveSteps(modifiedRoll);
             updatePlayerStatus();
 
             // Handle tile effects and encounters
@@ -2580,11 +2669,15 @@ async function processMovementRoll(currentPlayer, rollValue) {
                 return;
             }
 
+            // Track if dragon encounter was already handled
+            let dragonHandled = false;
+
             // Check for dragon zone passed through
             try {
                 const dragonPassed = checkDragonZonePassed(result?.tilesPassedThrough, startTile);
                 if (dragonPassed) {
                     await handleDragonEncounter(currentPlayer, dragonPassed);
+                    dragonHandled = true;
                 }
             } catch (err) {
                 console.error('[Game] Error in dragon zone check:', err);
@@ -2593,7 +2686,7 @@ async function processMovementRoll(currentPlayer, rollValue) {
             if (result && result.effect && result.effect.type !== 'dragon') {
                 await handleTileEffect(currentPlayer, result.effect);
             }
-            await checkForEncounters(currentPlayer);
+            await checkForEncounters(currentPlayer, dragonHandled);
             await checkElementalTileEffect(currentPlayer, startTile);
 
             // If extra turn was chosen, don't advance to next player
@@ -2608,6 +2701,16 @@ async function processMovementRoll(currentPlayer, rollValue) {
         return; // Exit early - the callback will handle the rest
     }
 
+    // Apply Chaos Vortex "POWER UP" double-roll buff (preserved through parkour;
+    // consumed only on the normal movement path).
+    if (currentPlayer.nextRollDouble) {
+        const before = modifiedRoll;
+        modifiedRoll = modifiedRoll * 2;
+        currentPlayer.nextRollDouble = false;
+        gameUI.showToast(`POWER UP! Roll doubled: ${before} → ${modifiedRoll}!`, 'success');
+        await delay(800);
+    }
+
     gameState = 'moving';
     instructionText.setText('Moving...');
 
@@ -2616,8 +2719,9 @@ async function processMovementRoll(currentPlayer, rollValue) {
         audioManager.playSFX('sfx_move_step');
     }
 
-    // Move the player
-    const result = await currentPlayer.moveSteps(Math.abs(modifiedRoll));
+    // Move the player (handle negative roll for reversed movement)
+    const moveSteps = modifiedRoll < 0 ? modifiedRoll : modifiedRoll;
+    const result = await currentPlayer.moveSteps(moveSteps);
 
     // Update player status display
     updatePlayerStatus();
@@ -2628,12 +2732,16 @@ async function processMovementRoll(currentPlayer, rollValue) {
         return;
     }
 
+    // Track if dragon encounter was already handled (to prevent double encounters)
+    let dragonHandled = false;
+
     // Check if player passed through a dragon zone during movement (sneak check)
     try {
         const dragonPassed = checkDragonZonePassed(result?.tilesPassedThrough, startTile);
         if (dragonPassed) {
             console.log(`[Game] ${currentPlayer.name} passed through ${dragonPassed.name}'s territory!`);
             await handleDragonEncounter(currentPlayer, dragonPassed);
+            dragonHandled = true;
             // After dragon encounter, player may have been moved - check for more encounters
         }
     } catch (err) {
@@ -2647,7 +2755,8 @@ async function processMovementRoll(currentPlayer, rollValue) {
     }
 
     // Check for encounters on the current tile (monsters, specials)
-    await checkForEncounters(currentPlayer);
+    // Skip dragon check if we already handled one this turn
+    await checkForEncounters(currentPlayer, dragonHandled);
 
     // Check for elemental tile effects (pass startTile to avoid repeated effects in same zone)
     await checkElementalTileEffect(currentPlayer, startTile);
@@ -2691,7 +2800,7 @@ async function checkElementalTileEffect(player, startTile) {
         },
         poison: {
             name: 'Poison Zone',
-            message: 'Toxic fumes slow you! Movement halved next turn',
+            message: 'Toxic fumes slow you! Movement reduced next turn',
             effect: 'slow',
             color: 'warning'
         }
@@ -2719,6 +2828,12 @@ async function checkElementalTileEffect(player, startTile) {
                 break;
 
             case 'slip':
+                // Grizelda's ice immunity
+                if (player.characterData && player.characterData.id === 'grizelda') {
+                    gameUI.showToast(`${effectData.name}: Dwarf boots grip the ice!`, 'success');
+                    playEffectBurst('sparkle', player.token.x, player.token.y - 20, 3, 30);
+                    break;
+                }
                 // Ice: Random slip 1 space forward or back
                 const slipDirection = Math.random() < 0.5 ? -1 : 1;
                 const slipDestination = Math.max(1, Math.min(100, player.currentTile + slipDirection));
@@ -2733,8 +2848,8 @@ async function checkElementalTileEffect(player, startTile) {
                 break;
 
             case 'slow':
-                // Poison: Movement halved next turn
-                player.applyStatusEffect({ type: 'slow', value: 0.5 });
+                // Poison: Movement reduced next turn (75% of normal)
+                player.applyStatusEffect({ type: 'slow', value: 0.75 });
                 gameUI.showToast(`${effectData.name}: ${effectData.message}`, effectData.color);
                 break;
         }
@@ -2749,24 +2864,65 @@ async function checkElementalTileEffect(player, startTile) {
  */
 async function handleTileEffect(player, effect) {
     if (effect.type === 'knight') {
-        // Play knight rescue/action animation
-        if (effect.knight && effect.knight.name) {
-            board.playKnightAction(effect.knight.name);
-        }
+        // Get the knight data for the modal
+        const knight = effect.knight;
+        const destination = effect.destination || effect.to;
 
-        // Knight boost effect - golden sparkles!
-        playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
+        // Show the knight encounter modal FIRST before teleporting
+        gameState = 'encounter';
+        await new Promise((resolve) => {
+            gameUI.showKnightEncounterModal(knight, player, async () => {
+                // After user acknowledges, play effects and teleport
+                gameState = 'moving';
 
-        // Play knight boost sound
-        if (audioManager) {
-            audioManager.playSFX('sfx_knight_boost');
-        }
+                // Play knight rescue/action animation
+                if (knight && knight.name) {
+                    board.playKnightAction(knight.name);
+                }
 
-        // Play player victory animation for being helped
-        player.playVictoryAnimation();
+                // Knight boost effect - golden sparkles!
+                playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
 
-        gameUI.showToast(`${effect.knight.boostMessage}`, 'success');
-        await delay(1200); // Slightly longer to see animations
+                // Play knight boost sound
+                if (audioManager) {
+                    audioManager.playSFX('sfx_knight_boost');
+                }
+
+                // Play player victory animation for being helped
+                player.playVictoryAnimation();
+
+                // Show Grizelda bonus if applicable
+                if (effect.grizeldaBonus) {
+                    gameUI.showToast(`Grizelda's Shortcuts: +${effect.grizeldaBonus} spaces!`, 'success');
+                    await delay(600);
+                }
+
+                // Now teleport to the destination
+                console.log(`[Game] Knight boosting player to tile ${destination}`);
+                await player.moveTo(destination, false);
+
+                // Check for cascading knight effects
+                const cascadeEffect = board.checkSpecialTile(player.currentTile);
+                if (cascadeEffect && cascadeEffect.type === 'knight') {
+                    console.log('[Game] Cascade knight effect detected!');
+                    await delay(500);
+
+                    // Calculate cascade destination with Grizelda bonus if applicable
+                    let cascadeDest = cascadeEffect.to;
+                    if (player.characterData && player.characterData.id === 'grizelda') {
+                        const bonus = player.characterData.passive?.knightBonus || 4;
+                        cascadeDest += bonus;
+                        cascadeEffect.grizeldaBonus = bonus;
+                    }
+                    cascadeEffect.destination = cascadeDest;
+
+                    // Recursively handle the cascade knight
+                    await handleTileEffect(player, cascadeEffect);
+                }
+
+                resolve();
+            });
+        });
     } else if (effect.type === 'dragon') {
         // Play dragon roar sound
         if (audioManager) {
@@ -2884,7 +3040,16 @@ async function handleDragonEncounter(player, dragon) {
     if (armorProtection) {
         // Show sparkle effect for protection
         playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
-        gameUI.showToast(`${armorProtection.name} protected you from ${dragon.name}!`, 'success');
+
+        // Grizelda's Reinforced - armor shard doesn't get consumed first time
+        if (player.characterData && player.characterData.id === 'grizelda' && !player.reinforcedUsed) {
+            player.reinforcedUsed = true;
+            // Re-add the armor shard that was consumed
+            player.inventory.addItem('armor_shard');
+            gameUI.showToast(`🔧 Reinforced! ${armorProtection.name} held strong against ${dragon.name}!`, 'success');
+        } else {
+            gameUI.showToast(`${armorProtection.name} protected you from ${dragon.name}!`, 'success');
+        }
         return;
     }
 
@@ -2949,6 +3114,9 @@ async function handleDragonEncounter(player, dragon) {
                 }
                 await player.moveTo(slideDestination, false);
                 updatePlayerStatus();
+
+                // Check for encounters at slide destination (e.g. another dragon)
+                await checkForEncounters(player);
             }
             gameState = 'moving';
             resolve();
@@ -2958,17 +3126,21 @@ async function handleDragonEncounter(player, dragon) {
 
 /**
  * Check for monster encounters and special tiles on current position
+ * @param {Player} player - The player to check encounters for
+ * @param {boolean} skipDragon - If true, skip dragon check (already handled this turn)
  */
-async function checkForEncounters(player) {
+async function checkForEncounters(player, skipDragon = false) {
     const tile = player.currentTile;
 
     // Check for dragon head - landing on dragon head triggers encounter
     // (This catches cases where the dragon check in movement didn't fire)
-    const dragon = EncounterData.getDragonAtTile(tile);
-    if (dragon) {
-        console.log(`[Game] ${player.name} landed on ${dragon.name}'s head tile!`);
-        await handleDragonEncounter(player, dragon);
-        return;
+    if (!skipDragon) {
+        const dragon = EncounterData.getDragonAtTile(tile);
+        if (dragon) {
+            console.log(`[Game] ${player.name} landed on ${dragon.name}'s head tile!`);
+            await handleDragonEncounter(player, dragon);
+            return;
+        }
     }
 
     // Check for portal first - player gets to choose whether to enter
@@ -2997,6 +3169,24 @@ async function checkForEncounters(player) {
  */
 async function handleMonsterEncounter(player, monster) {
     console.log(`[Game] ${player.name} encountered ${monster.name}!`);
+
+    // Kaelen's Evasion - first monster encounter auto-succeeds
+    if (player.characterData && player.characterData.id === 'kaelen' && !player.evasionUsed) {
+        player.evasionUsed = true;
+        playEffectBurst('sparkle', player.token.x, player.token.y - 20, 4, 40);
+        gameUI.showToast(`🏃 Evasion! ${player.name} dodges ${monster.name} with ease!`, 'success');
+        player.playActionAnimation();
+        return;
+    }
+
+    // Aurelia's Royal Decree - skip monster encounter once per game
+    if (player.characterData && player.characterData.id === 'aurelia' && !player.royalDecreeUsed) {
+        player.royalDecreeUsed = true;
+        playEffectBurst('sparkle', player.token.x, player.token.y - 20, 4, 40);
+        gameUI.showToast(`👑 Royal Decree! ${monster.name} bows and lets the princess pass!`, 'success');
+        player.playVictoryAnimation();
+        return;
+    }
 
     // Play encounter music
     if (audioManager) {
@@ -3084,6 +3274,13 @@ async function handlePortalEncounter(player, portal) {
 
     gameState = 'encounter';
 
+    // Elara's Scrying - pre-roll the effect so she can see it before deciding
+    let prerolledEffect = null;
+    if (player.characterData && player.characterData.id === 'elara') {
+        prerolledEffect = EncounterData.rollPortalEffect(portal, player.characterData);
+        console.log(`[Game] Elara's Scrying reveals: ${prerolledEffect?.message}`);
+    }
+
     return new Promise((resolve) => {
         gameUI.showPortalChoiceModal(portal, player, async (entered) => {
             if (entered) {
@@ -3092,8 +3289,8 @@ async function handlePortalEncounter(player, portal) {
                     audioManager.playSFX('sfx_portal_teleport');
                 }
 
-                // Roll for random effect
-                const effect = EncounterData.rollPortalEffect(portal);
+                // Use prerolled effect for Elara, otherwise roll now (Pippin's portalBonus applies here)
+                const effect = prerolledEffect || EncounterData.rollPortalEffect(portal, player.characterData);
                 if (effect) {
                     await applyPortalEffect(player, effect, portal);
                 }
@@ -3103,7 +3300,7 @@ async function handlePortalEncounter(player, portal) {
             }
             gameState = 'moving';
             resolve();
-        });
+        }, prerolledEffect); // Pass prerolled effect for Elara's preview
     });
 }
 
@@ -3113,14 +3310,37 @@ async function handlePortalEncounter(player, portal) {
 async function applyPortalEffect(player, effect, portal) {
     console.log(`[Game] Portal effect: ${effect.id} - ${effect.message}`);
 
+    // Determine if this is a good or bad effect
+    const goodEffects = ['move', 'loot', 'armor', 'cleanse', 'none', 'buff', 'steal_item', 'double_roll'];
+    const isGood = goodEffects.includes(effect.type) && (effect.value === undefined || effect.value > 0);
+
+    // Reginald's Shield Wall - block negative portal effects once per game
+    // Note: Still teleports even when blocked (portals always teleport!)
+    if (!isGood && player.characterData && player.characterData.id === 'reginald' && !player.shieldWallUsed) {
+        player.shieldWallUsed = true;
+        playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
+        gameUI.showToast(`🛡️ Shield Wall! ${player.name} blocks the negative effect!`, 'success');
+        player.playActionAnimation();
+        await delay(800);
+
+        // Still teleport even though effect was blocked (balanced range for fairness)
+        const minOffset = 3, maxOffset = 10;
+        const direction = Math.random() < 0.5 ? 1 : -1;
+        const distance = Math.floor(Math.random() * (maxOffset - minOffset + 1)) + minOffset;
+        const teleportDest = Math.max(1, Math.min(board.totalTiles - 1, player.currentTile + (direction * distance)));
+        if (teleportDest !== player.currentTile) {
+            const dirText = teleportDest > player.currentTile ? 'forward' : 'backward';
+            gameUI.showToast(`Portal warps you ${Math.abs(teleportDest - player.currentTile)} spaces ${dirText}!`, 'info');
+            await player.moveTo(teleportDest, false);
+            updatePlayerStatus();
+        }
+        return;
+    }
+
     // Visual effect based on portal type
     const effectType = portal.portalType === 'balanced' ? 'sparkle' :
                       portal.portalType === 'risky' ? 'smoke' : 'fire';
     playEffectBurst(effectType, player.token.x, player.token.y - 20, 5, 50);
-
-    // Determine if this is a good or bad effect for toast color
-    const goodEffects = ['move', 'loot', 'armor', 'cleanse', 'none', 'buff', 'steal_item', 'double_roll'];
-    const isGood = goodEffects.includes(effect.type) && (effect.value === undefined || effect.value > 0);
     const toastType = isGood ? 'success' : (effect.type === 'none' ? 'info' : 'danger');
 
     gameUI.showToast(effect.message, toastType);
@@ -3157,7 +3377,7 @@ async function applyPortalEffect(player, effect, portal) {
             // Gain armor shards
             for (let i = 0; i < (effect.value || 1); i++) {
                 if (player.inventory.hasSpace()) {
-                    player.inventory.addItem(ItemData.items.armor_shard);
+                    player.inventory.addItem('armor_shard');
                 }
             }
             updatePlayerStatus();
@@ -3176,10 +3396,13 @@ async function applyPortalEffect(player, effect, portal) {
             } else if (effect.effect === 'burned') {
                 player.applyStatusEffect({ type: 'burn' });
             } else if (effect.effect === 'stunned') {
-                player.applyStatusEffect({ type: 'stun' });
-                // Handle duration > 1 for multi-turn stun
-                if (effect.duration && effect.duration > 1) {
-                    player.stunDuration = effect.duration;
+                // Pippin's stun immunity
+                if (player.characterData && player.characterData.id === 'pippin' && !player.stunImmunityUsed) {
+                    player.stunImmunityUsed = true;
+                    gameUI.showToast(`🎵 Pippin avoids the stun!`, 'success');
+                    playEffectBurst('sparkle', player.token.x, player.token.y - 20, 3, 30);
+                } else {
+                    player.applyStatusEffect({ type: 'stun', duration: effect.duration });
                 }
             } else if (effect.effect === 'reversed') {
                 player.applyStatusEffect({ type: 'reverse' });
@@ -3190,7 +3413,7 @@ async function applyPortalEffect(player, effect, portal) {
         case 'lose_armor':
             // Lose armor shards
             for (let i = 0; i < (effect.value || 1); i++) {
-                player.inventory.removeItemById('armor_shard');
+                player.inventory.removeItem('armor_shard');
             }
             updatePlayerStatus();
             break;
@@ -3250,10 +3473,10 @@ async function applyPortalEffect(player, effect, portal) {
             // Steal item from player in the lead
             const leader = [...players].filter(p => p !== player && !p.hasWon)
                 .sort((a, b) => b.currentTile - a.currentTile)[0];
-            if (leader && leader.inventory.items.some(slot => slot !== null)) {
+            if (leader && leader.inventory.items.length > 0) {
                 const stolenItem = leader.inventory.removeRandomItem();
                 if (stolenItem && player.inventory.hasSpace()) {
-                    player.inventory.addItem(stolenItem);
+                    player.inventory.addItem(stolenItem.id);
                     gameUI.showToast(`Stole ${stolenItem.name} from ${leader.name}!`, 'success');
                 }
             }
@@ -3279,8 +3502,49 @@ async function applyPortalEffect(player, effect, portal) {
             break;
 
         case 'none':
-            // Nothing happens
+            // Nothing happens (but still teleports - see below)
             break;
+    }
+
+    // ALWAYS teleport after a portal effect (if not already moved)
+    // Effects that already move: 'move', 'move_to', 'teleport_random', 'swap_player'
+    const alreadyMoved = ['move', 'move_to', 'teleport_random', 'swap_player'].includes(effect.type);
+
+    if (!alreadyMoved) {
+        try {
+            // Calculate teleport range based on portal type
+            let minOffset, maxOffset;
+            if (portal.portalType === 'balanced') {
+                // Balanced: teleport 3-10 spaces forward or backward
+                minOffset = 3;
+                maxOffset = 10;
+            } else if (portal.portalType === 'risky') {
+                // Risky: teleport 5-15 spaces forward or backward
+                minOffset = 5;
+                maxOffset = 15;
+            } else {
+                // Chaotic: teleport 10-30 spaces anywhere
+                minOffset = 10;
+                maxOffset = 30;
+            }
+
+            // Random direction (forward or backward)
+            const direction = Math.random() < 0.5 ? 1 : -1;
+            const distance = Math.floor(Math.random() * (maxOffset - minOffset + 1)) + minOffset;
+            const totalTiles = board?.totalTiles || 100;
+            const teleportDest = Math.max(1, Math.min(totalTiles - 1, player.currentTile + (direction * distance)));
+
+            // Only teleport if destination is different
+            if (teleportDest !== player.currentTile) {
+                await delay(400);
+                const dirText = teleportDest > player.currentTile ? 'forward' : 'backward';
+                gameUI.showToast(`Portal warps you ${Math.abs(teleportDest - player.currentTile)} spaces ${dirText}!`, 'info');
+                await player.moveTo(teleportDest, false);
+                updatePlayerStatus();
+            }
+        } catch (err) {
+            console.error('[Portal] Error during teleport:', err);
+        }
     }
 }
 
@@ -3290,8 +3554,15 @@ async function applyPortalEffect(player, effect, portal) {
 async function applyEncounterEffect(player, effect) {
     switch (effect.type) {
         case 'stun':
-            player.applyStatusEffect({ type: 'stun' });
-            gameUI.showToast(effect.message, 'warning');
+            // Pippin's stun immunity (first stun each game)
+            if (player.characterData && player.characterData.id === 'pippin' && !player.stunImmunityUsed) {
+                player.stunImmunityUsed = true;
+                gameUI.showToast(`🎵 Pippin plays a tune and avoids being stunned!`, 'success');
+                playEffectBurst('sparkle', player.token.x, player.token.y - 20, 3, 30);
+            } else {
+                player.applyStatusEffect({ type: 'stun' });
+                gameUI.showToast(effect.message, 'warning');
+            }
             break;
         case 'slow':
             player.applyStatusEffect({ type: 'slow', value: effect.value });
@@ -3302,10 +3573,22 @@ async function applyEncounterEffect(player, effect) {
             gameUI.showToast(effect.message, 'warning');
             break;
         case 'knockback':
-            const newTile = Math.max(1, player.currentTile - effect.value);
-            await player.moveTo(newTile, false);
-            gameUI.showToast(effect.message, 'warning');
-            updatePlayerStatus();
+            let knockbackValue = effect.value;
+            // Reginald's Ironclad - reduce knockback by 3
+            if (player.characterData && player.characterData.id === 'reginald') {
+                knockbackValue = Math.max(0, knockbackValue - 3);
+                if (knockbackValue < effect.value) {
+                    gameUI.showToast(`🛡️ Ironclad reduces knockback!`, 'info');
+                }
+            }
+            if (knockbackValue > 0) {
+                const newTile = Math.max(1, player.currentTile - knockbackValue);
+                await player.moveTo(newTile, false);
+                gameUI.showToast(effect.message, 'warning');
+                updatePlayerStatus();
+            } else {
+                gameUI.showToast(`🛡️ Ironclad blocks the knockback!`, 'success');
+            }
             break;
         case 'loot':
             if (player.inventory.hasSpace()) {
@@ -3333,13 +3616,26 @@ async function handleSpecialTile(player, special) {
     console.log(`[Game] ${player.name} landed on ${special.name}!`);
 
     switch (special.effect.type) {
-        case 'full_armor':
-            // Rusty Anvil - fill inventory with armor shards
-            const added = player.inventory.fillWithArmor();
-            // Show fire/forge effect
-            playEffectBurst('fire', player.token.x, player.token.y - 20, 4, 40);
-            gameUI.showToast(`${special.effect.message} (+${added} shards)`, 'success');
-            break;
+        case 'gain_armor':
+            // Rusty Anvil - show encounter modal, then grant armor shard
+            gameState = 'encounter';
+            return new Promise((resolve) => {
+                gameUI.showEncounterModal(special, player, async () => {
+                    const added = player.inventory.addItem('armor_shard') ? 1 : 0;
+                    playEffectBurst('fire', player.token.x, player.token.y - 20, 4, 40);
+                    if (added) {
+                        gameUI.showToast(special.effect.message, 'success');
+                    } else {
+                        gameUI.showToast('Your inventory is full! No room for the shard.', 'warning');
+                    }
+                    if (audioManager) {
+                        audioManager.playSFX('sfx_encounter_success');
+                    }
+                    updatePlayerStatus();
+                    gameState = 'moving';
+                    resolve();
+                });
+            });
 
         case 'teleport_random':
             // Twin Portals - roll to determine destination
@@ -3370,40 +3666,46 @@ async function handleSpecialTile(player, special) {
             break;
 
         case 'loot':
-            // Treasure chest - sparkle effect
-            playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
-            // Play treasure open sound
-            if (audioManager) {
-                audioManager.playSFX('sfx_treasure_open');
-            }
-
-            // Aurelia's Royal Tax - get 2 items instead of 1
-            const lootCount = (player.characterData && player.characterData.id === 'aurelia') ? 2 : 1;
-            const itemsFound = [];
-
-            for (let i = 0; i < lootCount; i++) {
-                if (player.inventory.hasSpace()) {
-                    const item = player.inventory.addRandomItem();
-                    if (item) {
-                        itemsFound.push(item.name);
+            // Treasure chest - show encounter modal, then grant loot
+            gameState = 'encounter';
+            return new Promise((resolve) => {
+                gameUI.showEncounterModal(special, player, async () => {
+                    playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
+                    // Play treasure open sound
+                    if (audioManager) {
+                        audioManager.playSFX('sfx_treasure_open');
                     }
-                }
-            }
 
-            if (itemsFound.length > 0) {
-                // Play item get sound
-                if (audioManager) {
-                    audioManager.playSFX('sfx_item_get');
-                }
-                if (lootCount > 1 && itemsFound.length > 1) {
-                    gameUI.showToast(`Royal Tax! Found: ${itemsFound.join(' & ')}!`, 'success');
-                } else {
-                    gameUI.showToast(`${special.effect.message} Got: ${itemsFound[0]}!`, 'success');
-                }
-            } else {
-                gameUI.showToast('Found treasure but inventory is full!', 'warning');
-            }
-            break;
+                    // Aurelia's Royal Tax - get 2 items instead of 1
+                    const lootCount = (player.characterData && player.characterData.id === 'aurelia') ? 2 : 1;
+                    const itemsFound = [];
+
+                    for (let i = 0; i < lootCount; i++) {
+                        if (player.inventory.hasSpace()) {
+                            const item = player.inventory.addRandomItem();
+                            if (item) {
+                                itemsFound.push(item.name);
+                            }
+                        }
+                    }
+
+                    if (itemsFound.length > 0) {
+                        if (audioManager) {
+                            audioManager.playSFX('sfx_item_get');
+                        }
+                        if (lootCount > 1 && itemsFound.length > 1) {
+                            gameUI.showToast(`Royal Tax! Found: ${itemsFound.join(' & ')}!`, 'success');
+                        } else {
+                            gameUI.showToast(`${special.effect.message} Got: ${itemsFound[0]}!`, 'success');
+                        }
+                    } else {
+                        gameUI.showToast('Found treasure but inventory is full!', 'warning');
+                    }
+                    updatePlayerStatus();
+                    gameState = 'moving';
+                    resolve();
+                });
+            });
     }
 }
 
@@ -3476,8 +3778,12 @@ function handleItemClick(player, item, playerIndex) {
         return;
     }
 
-    // Check if modal is already open
+    // Check if modal is already open (but allow spell scroll clicks during its countdown window)
     if (gameUI.isModalOpen) {
+        // Special case: allow clicking spell scroll during its own countdown window
+        if (item.id === 'spell_scroll' && gameUI.isSpellScrollWindowActive()) {
+            gameUI.triggerSpellScrollUse();
+        }
         return;
     }
 
@@ -3509,8 +3815,13 @@ function handleItemClick(player, item, playerIndex) {
             }
         });
     } else if (item.timing === 'after_roll') {
-        // Spell Scroll - can only be used when there's a pending roll to reroll
-        gameUI.showToast(`${item.name} can be used after rolling (will prompt automatically)`, 'info');
+        // Spell Scroll - check if countdown window is active
+        if (item.id === 'spell_scroll' && gameUI.isSpellScrollWindowActive()) {
+            // Trigger the reroll from inventory click
+            gameUI.triggerSpellScrollUse();
+        } else {
+            gameUI.showToast(`${item.name} can be used after rolling (watch for countdown!)`, 'info');
+        }
     } else if (item.timing === 'during_encounter') {
         // Smoke Bomb - can only be used during monster encounters
         gameUI.showToast(`${item.name} can be used during monster encounters (will prompt automatically)`, 'info');
@@ -3530,14 +3841,15 @@ function showLegendPopup() {
     const cx = screenW / 2;
     const cy = screenH / 2;
 
-    const legendContainer = scene.add.container(0, 0);
-    legendContainer.setDepth(300);
-    legendContainer.setScrollFactor(0);
+    // Store elements for cleanup (not using container for better click handling)
+    const legendElements = [];
 
-    // Overlay
+    // Overlay - add directly to scene with high depth
     const overlay = scene.add.rectangle(cx, cy, screenW, screenH, 0x000000, 0.8);
+    overlay.setDepth(400);
+    overlay.setScrollFactor(0);
     overlay.setInteractive();
-    legendContainer.add(overlay);
+    legendElements.push(overlay);
 
     // Modal - compact size for legend
     const modalW = 280;
@@ -3549,7 +3861,9 @@ function showLegendPopup() {
     modalBg.fillRoundedRect(cx - modalW/2 + 4, cy - modalH/2 + 4, modalW - 8, 40, 10);
     modalBg.lineStyle(3, 0xc9a227, 1);
     modalBg.strokeRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 12);
-    legendContainer.add(modalBg);
+    modalBg.setDepth(401);
+    modalBg.setScrollFactor(0);
+    legendElements.push(modalBg);
 
     // Title
     const title = scene.add.text(cx, cy - modalH/2 + 25, 'LEGEND', {
@@ -3558,7 +3872,9 @@ function showLegendPopup() {
         color: '#c9a227',
         letterSpacing: 3
     }).setOrigin(0.5);
-    legendContainer.add(title);
+    title.setDepth(401);
+    title.setScrollFactor(0);
+    legendElements.push(title);
 
     // Legend items
     const legendItems = [
@@ -3577,13 +3893,17 @@ function showLegendPopup() {
         const glow = scene.add.graphics();
         glow.fillStyle(item.color, 0.3);
         glow.fillCircle(dotX, y, 10);
-        legendContainer.add(glow);
+        glow.setDepth(401);
+        glow.setScrollFactor(0);
+        legendElements.push(glow);
 
         // Dot
         const dot = scene.add.graphics();
         dot.fillStyle(item.color, 1);
         dot.fillCircle(dotX, y, 6);
-        legendContainer.add(dot);
+        dot.setDepth(401);
+        dot.setScrollFactor(0);
+        legendElements.push(dot);
 
         // Label
         const label = scene.add.text(dotX + 20, y, item.label, {
@@ -3591,12 +3911,14 @@ function showLegendPopup() {
             fontFamily: 'Arial',
             color: '#cccccc'
         }).setOrigin(0, 0.5);
-        legendContainer.add(label);
+        label.setDepth(401);
+        label.setScrollFactor(0);
+        legendElements.push(label);
     });
 
     // Close function
     const closeLegend = () => {
-        legendContainer.destroy();
+        legendElements.forEach(el => el.destroy());
         gameUI.isModalOpen = false;
     };
 
@@ -3608,7 +3930,9 @@ function showLegendPopup() {
     const closeBtnBg = scene.add.graphics();
     closeBtnBg.fillStyle(0xc9a227, 1);
     closeBtnBg.fillRoundedRect(cx - 50, closeBtnY - 14, 100, 28, 6);
-    legendContainer.add(closeBtnBg);
+    closeBtnBg.setDepth(401);
+    closeBtnBg.setScrollFactor(0);
+    legendElements.push(closeBtnBg);
 
     const closeBtnText = scene.add.text(cx, closeBtnY, 'CLOSE', {
         fontSize: '14px',
@@ -3616,9 +3940,13 @@ function showLegendPopup() {
         color: '#000000',
         fontStyle: 'bold'
     }).setOrigin(0.5);
-    legendContainer.add(closeBtnText);
+    closeBtnText.setDepth(401);
+    closeBtnText.setScrollFactor(0);
+    legendElements.push(closeBtnText);
 
     const closeBtnHit = scene.add.rectangle(cx, closeBtnY, 100, 28, 0x000000, 0);
+    closeBtnHit.setDepth(402);
+    closeBtnHit.setScrollFactor(0);
     closeBtnHit.setInteractive({ useHandCursor: true });
     closeBtnHit.on('pointerover', () => {
         closeBtnBg.clear();
@@ -3631,7 +3959,7 @@ function showLegendPopup() {
         closeBtnBg.fillRoundedRect(cx - 50, closeBtnY - 14, 100, 28, 6);
     });
     closeBtnHit.on('pointerdown', closeLegend);
-    legendContainer.add(closeBtnHit);
+    legendElements.push(closeBtnHit);
 }
 
 /**
@@ -3652,7 +3980,7 @@ function showHelpGuide() {
 
     // Overlay - directly on scene with scrollFactor 0
     const overlay = scene.add.rectangle(cx, cy, screenW, screenH, 0x000000, 0.9);
-    overlay.setDepth(300);
+    overlay.setDepth(400);
     overlay.setScrollFactor(0);
     overlay.setInteractive();
     helpElements.push(overlay);
@@ -3667,7 +3995,7 @@ function showHelpGuide() {
     modalBg.fillRoundedRect(cx - modalW/2 + 4, cy - modalH/2 + 4, modalW - 8, 60, 14);
     modalBg.lineStyle(3, 0xc9a227, 1);
     modalBg.strokeRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 16);
-    modalBg.setDepth(301);
+    modalBg.setDepth(401);
     modalBg.setScrollFactor(0);
     helpElements.push(modalBg);
 
@@ -3679,7 +4007,7 @@ function showHelpGuide() {
         stroke: '#000000',
         strokeThickness: 3
     }).setOrigin(0.5);
-    title.setDepth(302);
+    title.setDepth(402);
     title.setScrollFactor(0);
     helpElements.push(title);
 
@@ -3717,8 +4045,13 @@ CONTROLS
         wordWrap: { width: modalW - 50 },
         align: 'left'
     }).setOrigin(0.5, 0);
-    content.setDepth(302);
+    content.setDepth(402);
     content.setScrollFactor(0);
+    // Ensure text doesn't overflow past the close button
+    const maxTextHeight = modalH - 110;
+    if (content.height > maxTextHeight) {
+        content.setCrop(0, 0, content.width, maxTextHeight);
+    }
     helpElements.push(content);
 
     // Close button - directly on scene
@@ -3729,7 +4062,7 @@ CONTROLS
     const btnBg = scene.add.graphics();
     btnBg.fillStyle(0xc9a227, 1);
     btnBg.fillRoundedRect(cx - btnW/2, btnY - btnH/2, btnW, btnH, 8);
-    btnBg.setDepth(302);
+    btnBg.setDepth(402);
     btnBg.setScrollFactor(0);
     helpElements.push(btnBg);
 
@@ -3739,12 +4072,12 @@ CONTROLS
         color: '#000000',
         fontStyle: 'bold'
     }).setOrigin(0.5);
-    btnText.setDepth(303);
+    btnText.setDepth(403);
     btnText.setScrollFactor(0);
     helpElements.push(btnText);
 
     const btnHitArea = scene.add.rectangle(cx, btnY, btnW, btnH, 0x000000, 0);
-    btnHitArea.setDepth(304);
+    btnHitArea.setDepth(404);
     btnHitArea.setScrollFactor(0);
     btnHitArea.setInteractive({ useHandCursor: true });
     helpElements.push(btnHitArea);
@@ -3839,13 +4172,27 @@ function nextTurn() {
     // Reset ability activation state for new turn
     resetAbilityState();
 
+    const currentPlayer = players[currentPlayerIndex];
+
+    // Check if player is stunned - auto-skip their turn
+    if (!currentPlayer.canTakeTurn()) {
+        turnText.setText(currentPlayer.name);
+        updatePlayerStatus();
+        panToPlayer(currentPlayer, 400);
+        gameUI.showToast(`${currentPlayer.name} is stunned! Skipping turn...`, 'warning');
+        setTimeout(() => {
+            nextTurn();
+        }, 1500);
+        return;
+    }
+
     // Play turn start sound
     if (audioManager) {
         audioManager.playSFX('sfx_turn_start');
     }
 
     // Update UI
-    turnText.setText(players[currentPlayerIndex].name);
+    turnText.setText(currentPlayer.name);
     instructionText.setText('Click dice or SPACE\nto roll!');
 
     // Set state back to waiting
@@ -3855,9 +4202,9 @@ function nextTurn() {
     updatePlayerStatus();
 
     // Auto-center camera on new current player
-    panToPlayer(players[currentPlayerIndex], 400);
+    panToPlayer(currentPlayer, 400);
 
-    console.log(`[Game] Turn passed to ${players[currentPlayerIndex].name}`);
+    console.log(`[Game] Turn passed to ${currentPlayer.name}`);
 }
 
 // ============================================================================
@@ -3922,6 +4269,171 @@ function resetGame() {
 // ============================================================================
 // INITIALIZE GAME
 // ============================================================================
+
+// Expose test helpers for Playwright automation
+window.__TEST__ = {
+    getGameState: () => gameState,
+    isBoardReady: () => board && board.tiles && Object.keys(board.tiles).length > 0,
+    getPlayers: () => players,
+    getCurrentPlayerIndex: () => currentPlayerIndex,
+    debugMove: () => debugMove(),
+    triggerEncounter: (encounterType, id) => {
+        const player = players[currentPlayerIndex];
+        if (!player) return 'no player';
+        if (encounterType === 'monster') {
+            const monster = EncounterData.monsters[id];
+            if (monster) { handleMonsterEncounter(player, monster); return 'ok'; }
+        } else if (encounterType === 'dragon') {
+            const dragon = EncounterData.dragons[id];
+            if (dragon) { handleDragonEncounter(player, dragon); return 'ok'; }
+        } else if (encounterType === 'special') {
+            const special = EncounterData.special[id];
+            if (special) { handleSpecialTile(player, special); return 'ok'; }
+        } else if (encounterType === 'portal') {
+            const portal = EncounterData.special[id];
+            if (portal) { handlePortalEncounter(player, portal); return 'ok'; }
+        } else if (encounterType === 'knight') {
+            const knight = EncounterData.knights[id];
+            if (knight) {
+                const effect = { type: 'knight', knight, destination: knight.destinationTile };
+                handleTileEffect(player, effect);
+                return 'ok';
+            }
+        }
+        return 'not found';
+    },
+    skipCharacterSelect: () => {
+        // Quick-start: set 2 players with first two characters
+        const chars = Object.values(CharacterData.characters);
+        numberOfPlayers = 2;
+        isMultiplayer = false;
+        isMyTurn = true;
+        playerCharacterSelections = [chars[0], chars[1]];
+        const scene = game.scene.scenes[0];
+        // Clean up main menu / multiplayer UI
+        if (multiplayerUI) multiplayerUI.clearElements();
+        // Clean up selection UI
+        ['playerCountGlow', 'playerCountPanel', 'playerCountText',
+         'playerCountBtnBg2', 'playerCountBtnBg3', 'playerCountBtnBg4',
+         'playerCountNum2', 'playerCountNum3', 'playerCountNum4',
+         'playerCountLabel2', 'playerCountLabel3', 'playerCountLabel4',
+         'playerCountBtn2', 'playerCountBtn3', 'playerCountBtn4',
+         'titleBackground', 'selectOverlay', 'selectTitle'
+        ].forEach(name => scene.children.getByName(name)?.destroy());
+        // Also clean up character select UI if visible
+        if (gameUI && gameUI.characterSelectContainer) {
+            gameUI.characterSelectContainer.destroy();
+            gameUI.characterSelectContainer = null;
+            gameUI.isModalOpen = false;
+        }
+        finishCharacterSelection.call(scene);
+    },
+    showHelpGuide: () => {
+        gameUI.isModalOpen = false;
+        showHelpGuide();
+        return 'ok';
+    },
+    showLegend: () => {
+        gameUI.isModalOpen = false;
+        showLegendPopup();
+        return 'ok';
+    },
+    showInventory: (playerIndex) => {
+        const player = players[playerIndex || 0];
+        if (!player) return 'no player';
+        gameUI.showItemUseModal(
+            { id: 'speed_potion', name: 'Speed Potion', description: 'Adds +3 to your next movement roll', type: 'active', timing: 'before_roll', rarity: 'uncommon', effect: { type: 'movement_bonus', value: 3 } },
+            player,
+            () => {}
+        );
+        return 'ok';
+    },
+    showParkourChoice: () => {
+        gameUI.showParkourChoice(() => {});
+        return 'ok';
+    },
+    showArcaneInsightChoice: () => {
+        gameUI.showArcaneInsightChoice(3, 5, 'Player 2', () => {});
+        return 'ok';
+    },
+    showRerollChoice: () => {
+        gameUI.showRerollChoice(2, 'movement', () => {});
+        return 'ok';
+    },
+    showTimedRerollChoice: () => {
+        gameUI.showTimedRerollChoice(3, 'encounter', 30, () => {});
+        return 'ok';
+    },
+    showRollResult: (success, roll) => {
+        const player = players[currentPlayerIndex];
+        if (!player) return 'no player';
+        const monster = EncounterData.monsters.milkbaby;
+        // Set up modal state
+        gameUI.isModalOpen = true;
+        gameUI.modalElements = [];
+        gameUI.modalCenterX = game.scene.scenes[0].scale.width / 2;
+        gameUI.modalCenterY = game.scene.scenes[0].scale.height / 2;
+        // Build modal base then show result
+        gameUI.rebuildModalBase(monster);
+        gameUI.showRollResult(monster, player, {
+            success: success,
+            roll: roll || (success ? 5 : 2),
+            message: success ? 'You defeated the monster!' : 'The monster overpowers you!'
+        });
+        return 'ok';
+    },
+    simulateWin: (playerIndex) => {
+        const player = players[playerIndex || 0];
+        if (!player) return 'no player';
+        handleWin(player);
+        return 'ok';
+    },
+    showToast: (msg, type) => {
+        gameUI.showToast(msg || 'Test toast message', type || 'info');
+        return 'ok';
+    },
+    skipCharacterSelectN: (n) => {
+        const chars = Object.values(CharacterData.characters);
+        numberOfPlayers = Math.min(n || 2, chars.length);
+        isMultiplayer = false;
+        isMyTurn = true;
+        playerCharacterSelections = chars.slice(0, numberOfPlayers);
+        const scene = game.scene.scenes[0];
+        if (multiplayerUI) multiplayerUI.clearElements();
+        ['playerCountGlow', 'playerCountPanel', 'playerCountText',
+         'playerCountBtnBg2', 'playerCountBtnBg3', 'playerCountBtnBg4',
+         'playerCountNum2', 'playerCountNum3', 'playerCountNum4',
+         'playerCountLabel2', 'playerCountLabel3', 'playerCountLabel4',
+         'playerCountBtn2', 'playerCountBtn3', 'playerCountBtn4',
+         'titleBackground', 'selectOverlay', 'selectTitle'
+        ].forEach(name => scene.children.getByName(name)?.destroy());
+        if (gameUI && gameUI.characterSelectContainer) {
+            gameUI.characterSelectContainer.destroy();
+            gameUI.characterSelectContainer = null;
+            gameUI.isModalOpen = false;
+        }
+        finishCharacterSelection.call(scene);
+        return 'ok';
+    },
+    closeModal: () => {
+        // Try to close various modal types
+        if (gameUI.modalElements) {
+            gameUI.modalElements.forEach(el => { if (el && el.destroy) el.destroy(); });
+            gameUI.modalElements = [];
+        }
+        if (gameUI.abilityChoiceContainer) {
+            gameUI.abilityChoiceContainer.destroy();
+            gameUI.abilityChoiceContainer = null;
+        }
+        if (gameUI.portalElements) {
+            gameUI.portalElements.forEach(el => el.destroy());
+            gameUI.portalElements = null;
+        }
+        gameUI.closeRerollChoice();
+        gameUI.isModalOpen = false;
+        return 'ok';
+    }
+};
 
 // Wait for DOM to be ready, then start Phaser
 window.addEventListener('load', () => {

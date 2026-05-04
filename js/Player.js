@@ -73,15 +73,13 @@ class Player {
         this.spriteScale = 0.625; // Default for 64px frames
         this.createToken();
 
-        // Apply starting bonuses (Princess Aurelia's Royal Tax)
-        if (characterData && characterData.id === 'aurelia') {
-            this.inventory.addRandomItem();
-            console.log(`[Player ${playerNumber}] ${this.name} starts with a bonus item!`);
-        }
+        // Note: Aurelia's Royal Tax starting bonuses (tile 5, item, armor) are
+        // applied in game.js after construction so they can use the board reference
+        // and run consistently across single-player and multiplayer rehydration.
 
-        // Track Elara's Arcane Insight ability uses
+        // Track Elara's Arcane Insight ability uses (now 2 per game)
         if (characterData && characterData.id === 'elara') {
-            this.arcaneInsightUsed = false;
+            this.arcaneInsightUses = characterData.passive?.usesRemaining || 2;
         }
 
         console.log(`[Player ${playerNumber}] ${this.name} created at tile 1`);
@@ -268,17 +266,22 @@ class Player {
             await this.delay(500);
 
             if (effect.type === 'knight') {
-                // Knights boost immediately - move to destination
-                console.log(`[Player ${this.playerNumber}] Knight boosts to tile ${effect.to}!`);
-                await this.moveTo(effect.to, false);
+                // Calculate knight destination (with Grizelda bonus if applicable)
+                // but DON'T teleport here - let game.js show the modal first
+                let destination = effect.to;
 
-                // Re-check for cascading effects (landing on another special tile)
-                const cascadeEffect = this.board.checkSpecialTile(this.currentTile);
-                if (cascadeEffect && cascadeEffect.type === 'knight') {
-                    console.log(`[Player ${this.playerNumber}] Cascade knight effect!`);
-                    await this.delay(500);
-                    await this.moveTo(cascadeEffect.to, false);
+                // Grizelda's Shortcuts ability - +4 extra spaces on knight boost
+                if (this.characterData && this.characterData.id === 'grizelda') {
+                    const bonus = this.characterData.passive?.knightBonus || 4;
+                    destination += bonus;
+                    effect.grizeldaBonus = bonus;
+                    console.log(`[Player ${this.playerNumber}] Grizelda's Shortcuts: +${bonus} spaces!`);
                 }
+
+                // Store the calculated destination for game.js to use after showing modal
+                effect.destination = destination;
+                console.log(`[Player ${this.playerNumber}] Knight effect detected - destination: ${destination}`);
+                // Note: Teleport and cascade handling moved to handleTileEffect in game.js
             }
             // Dragons are handled in game.js via handleDragonEncounter
             // which shows a defense roll modal before deciding movement
@@ -332,7 +335,10 @@ class Player {
         switch(effect.type) {
             case 'stun':
                 this.statusEffects.stunned = true;
-                console.log(`[Player ${this.playerNumber}] STUNNED - will skip next turn`);
+                if (effect.duration && effect.duration > 1) {
+                    this.stunDuration = effect.duration;
+                }
+                console.log(`[Player ${this.playerNumber}] STUNNED - will skip ${this.stunDuration || 1} turn(s)`);
                 break;
             case 'slow':
                 this.statusEffects.slowed = true;
@@ -342,6 +348,10 @@ class Player {
             case 'reverse':
                 this.statusEffects.reversed = true;
                 console.log(`[Player ${this.playerNumber}] REVERSED - will move backwards next turn`);
+                break;
+            case 'burn':
+                this.statusEffects.burned = true;
+                console.log(`[Player ${this.playerNumber}] BURNED - -1 to next roll`);
                 break;
             case 'knockback':
                 // Immediate effect - move back X spaces
@@ -368,6 +378,7 @@ class Player {
             reversed: false,
             burned: false
         };
+        this.stunDuration = 0;
     }
 
     /**
@@ -375,8 +386,15 @@ class Player {
      */
     canTakeTurn() {
         if (this.statusEffects.stunned) {
-            console.log(`[Player ${this.playerNumber}] is stunned - skipping turn`);
-            this.statusEffects.stunned = false; // Clear after skipping
+            // Multi-turn stun: decrement duration; only clear when it reaches 0
+            if (this.stunDuration && this.stunDuration > 1) {
+                this.stunDuration -= 1;
+                console.log(`[Player ${this.playerNumber}] is stunned - skipping turn (${this.stunDuration} more to go)`);
+            } else {
+                this.stunDuration = 0;
+                this.statusEffects.stunned = false;
+                console.log(`[Player ${this.playerNumber}] is stunned - skipping turn (final)`);
+            }
             return false;
         }
         return true;
@@ -428,18 +446,27 @@ class Player {
     canUseArcaneInsight() {
         return this.characterData &&
                this.characterData.id === 'elara' &&
-               !this.arcaneInsightUsed;
+               this.arcaneInsightUses > 0;
     }
 
     /**
-     * Use Elara's Arcane Insight ability (marks as used)
+     * Use Elara's Arcane Insight ability (decrements uses, grants +1 bonus)
      */
     useArcaneInsight() {
         if (this.canUseArcaneInsight()) {
-            this.arcaneInsightUsed = true;
+            this.arcaneInsightUses--;
+            // Grant +1 to next roll
+            this.arcaneInsightBonus = 1;
             return true;
         }
         return false;
+    }
+
+    /**
+     * Get remaining Arcane Insight uses
+     */
+    getArcaneInsightUses() {
+        return this.arcaneInsightUses || 0;
     }
 
     /**

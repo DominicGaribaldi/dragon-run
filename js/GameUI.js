@@ -594,8 +594,8 @@ class GameUI {
             requirement = 'Roll ODD (1, 3, 5) to succeed';
         } else {
             let threshold = check.successMin;
-            if (player.characterData && player.characterData.id === 'pippin' && encounter.tile) {
-                threshold = Math.max(threshold - 1, 2);
+            if (player.characterData && player.characterData.id === 'pippin' && encounter.encounterCheck) {
+                threshold = Math.max(threshold - 2, 2);
             }
             requirement = `Roll ${threshold}+ to succeed`;
         }
@@ -1085,6 +1085,154 @@ class GameUI {
         });
     }
 
+    /**
+     * Show knight encounter modal (shows illustration before teleport)
+     * @param {Object} knight - Knight data from EncounterData
+     * @param {Object} player - Player who triggered it
+     * @param {Function} callback - Called when player acknowledges
+     */
+    showKnightEncounterModal(knight, player, callback) {
+        this.isModalOpen = true;
+        this.modalElements = [];
+
+        const screenW = this.scene.scale.width;
+        const screenH = this.scene.scale.height;
+        const cx = screenW / 2;
+        const cy = screenH / 2;
+
+        // Background overlay
+        const overlay = this.scene.add.rectangle(cx, cy, screenW, screenH, 0x000000, 0.9);
+        overlay.setDepth(200);
+        overlay.setScrollFactor(0);
+        overlay.setInteractive();
+        this.modalElements.push(overlay);
+
+        // Modal dimensions
+        const modalW = 500;
+        const modalH = 600;
+        const borderColor = 0xffd700; // Gold for knights
+        const glowColor = 0xffaa00;
+
+        // Outer glow
+        const glow = this.scene.add.graphics();
+        glow.fillStyle(glowColor, 0.15);
+        glow.fillRoundedRect(cx - modalW/2 - 15, cy - modalH/2 - 15, modalW + 30, modalH + 30, 24);
+        glow.fillStyle(glowColor, 0.08);
+        glow.fillRoundedRect(cx - modalW/2 - 25, cy - modalH/2 - 25, modalW + 50, modalH + 50, 32);
+        glow.setDepth(201);
+        glow.setScrollFactor(0);
+        this.modalElements.push(glow);
+
+        // Modal background
+        const modalBg = this.scene.add.graphics();
+        modalBg.fillStyle(0x0d0d1a, 1);
+        modalBg.fillRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 16);
+        modalBg.fillStyle(0x1a1a2e, 0.5);
+        modalBg.fillRoundedRect(cx - modalW/2 + 4, cy - modalH/2 + 4, modalW - 8, modalH/2, 14);
+        modalBg.lineStyle(3, borderColor, 1);
+        modalBg.strokeRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 16);
+        modalBg.lineStyle(1, borderColor, 0.3);
+        modalBg.strokeRoundedRect(cx - modalW/2 + 6, cy - modalH/2 + 6, modalW - 12, modalH - 12, 12);
+        modalBg.setDepth(202);
+        modalBg.setScrollFactor(0);
+        this.modalElements.push(modalBg);
+
+        // Knight name
+        const name = this.scene.add.text(cx, cy - modalH/2 + 35, knight.name.toUpperCase(), {
+            fontSize: '24px',
+            fontFamily: 'Georgia, serif',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+        name.setDepth(203);
+        name.setScrollFactor(0);
+        this.modalElements.push(name);
+
+        // Title
+        if (knight.title) {
+            const title = this.scene.add.text(cx, cy - modalH/2 + 60, knight.title, {
+                fontSize: '12px',
+                fontFamily: 'Arial',
+                color: '#ffaa00'
+            }).setOrigin(0.5);
+            title.setDepth(203);
+            title.setScrollFactor(0);
+            this.modalElements.push(title);
+        }
+
+        // Knight illustration - try encounter card first, then sprite sheet
+        const encounterImgKey = `encounter_${knight.id}`;
+        const imgKey = this.scene.textures.exists(encounterImgKey) ? encounterImgKey : knight.spriteKey;
+        const imgY = cy - 40;
+        const imgSize = 350;
+
+        if (imgKey && this.scene.textures.exists(imgKey)) {
+            let img;
+            if (this.scene.textures.exists(encounterImgKey)) {
+                img = this.scene.add.image(cx, imgY, encounterImgKey);
+                const frame = this.scene.textures.getFrame(encounterImgKey);
+                const scale = Math.min(imgSize / frame.width, imgSize / frame.height);
+                img.setScale(scale);
+            } else {
+                img = this.scene.add.sprite(cx, imgY, imgKey, 0);
+                img.setDisplaySize(imgSize, imgSize);
+                const fullAnim = `${imgKey}_full`;
+                const idleAnim = `${imgKey}_idle`;
+                if (this.scene.anims.exists(fullAnim)) {
+                    img.play(fullAnim);
+                } else if (this.scene.anims.exists(idleAnim)) {
+                    img.play(idleAnim);
+                }
+            }
+            img.setDepth(203);
+            img.setScrollFactor(0);
+            this.modalElements.push(img);
+        }
+
+        // Description
+        const desc = this.scene.add.text(cx, cy + 150, knight.description, {
+            fontSize: '14px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa',
+            wordWrap: { width: modalW - 60 },
+            align: 'center'
+        }).setOrigin(0.5);
+        desc.setDepth(203);
+        desc.setScrollFactor(0);
+        this.modalElements.push(desc);
+
+        // Boost message
+        const boostMsg = this.scene.add.text(cx, cy + 190, `"${knight.boostMessage}"`, {
+            fontSize: '16px',
+            fontFamily: 'Georgia, serif',
+            fontStyle: 'italic',
+            color: '#ffd700',
+            wordWrap: { width: modalW - 60 },
+            align: 'center'
+        }).setOrigin(0.5);
+        boostMsg.setDepth(203);
+        boostMsg.setScrollFactor(0);
+        this.modalElements.push(boostMsg);
+
+        // Continue button
+        const continueBtn = this.createModalButton(cx, cy + 255, 'ONWARD!', () => {
+            // Fade out and cleanup
+            const fadeTargets = this.modalElements.filter(el => el && el.setAlpha);
+            this.scene.tweens.add({
+                targets: fadeTargets,
+                alpha: 0,
+                duration: 200,
+                onComplete: () => {
+                    this.clearModalElements();
+                    this.isModalOpen = false;
+                    callback();
+                }
+            });
+        }, borderColor);
+        this.modalElements.push(continueBtn);
+    }
+
     // =========================================================================
     // INVENTORY UI
     // =========================================================================
@@ -1534,57 +1682,73 @@ class GameUI {
         this.isModalOpen = true;
         this.abilityChoiceContainer = this.scene.add.container(0, 0);
         this.abilityChoiceContainer.setDepth(200);
+        this.abilityChoiceContainer.setScrollFactor(0);
 
-        // Background overlay
-        const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8);
+        // Get screen dimensions for centering
+        const screenW = this.scene.scale.width;
+        const screenH = this.scene.scale.height;
+        const cx = screenW / 2;
+        const cy = screenH / 2;
+
+        // Modal dimensions
+        const modalW = 600;
+        const modalH = 280;
+
+        // Background overlay - covers full screen
+        const overlay = this.scene.add.rectangle(cx, cy, screenW, screenH, 0x000000, 0.8);
+        overlay.setScrollFactor(0);
         this.abilityChoiceContainer.add(overlay);
 
-        // Modal box
+        // Modal box - centered
         const modalBg = this.scene.add.graphics();
         modalBg.fillStyle(0x1a1a2e, 1);
-        modalBg.fillRoundedRect(340, 220, 600, 280, 16);
+        modalBg.fillRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 16);
         modalBg.lineStyle(4, 0x2A9D8F, 1);
-        modalBg.strokeRoundedRect(340, 220, 600, 280, 16);
+        modalBg.strokeRoundedRect(cx - modalW/2, cy - modalH/2, modalW, modalH, 16);
+        modalBg.setScrollFactor(0);
         this.abilityChoiceContainer.add(modalBg);
 
         // Title
-        const title = this.scene.add.text(640, 260, 'PARKOUR ABILITY', {
+        const title = this.scene.add.text(cx, cy - 100, 'PARKOUR ABILITY', {
             fontSize: '28px',
             fontFamily: 'Georgia, serif',
             color: '#2A9D8F',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
+        title.setScrollFactor(0);
         this.abilityChoiceContainer.add(title);
 
         // Description
-        const desc = this.scene.add.text(640, 300, 'You rolled a 6! Choose your move:', {
+        const desc = this.scene.add.text(cx, cy - 60, 'You rolled a 6! Choose your move:', {
             fontSize: '16px',
             fontFamily: 'Arial',
             color: '#cccccc'
         }).setOrigin(0.5);
+        desc.setScrollFactor(0);
         this.abilityChoiceContainer.add(desc);
 
         // Option 1: Move 6 spaces
-        const option1Btn = this.createButton(460, 380, 'Move 6 Spaces', () => {
+        const option1Btn = this.createButton(cx - 180, cy + 20, 'Move 6 Spaces', () => {
             this.closeAbilityChoice();
             callback({ spaces: 6, extraTurn: false });
         }, 0x2A9D8F);
         this.abilityChoiceContainer.add(option1Btn);
 
         // Option 2: Move 3 spaces + extra turn
-        const option2Btn = this.createButton(820, 380, 'Move 3 + Extra Turn', () => {
+        const option2Btn = this.createButton(cx + 180, cy + 20, 'Move 3 + Extra Turn', () => {
             this.closeAbilityChoice();
             callback({ spaces: 3, extraTurn: true });
         }, 0xc9a227);
         this.abilityChoiceContainer.add(option2Btn);
 
         // Hint text
-        const hint = this.scene.add.text(640, 450, 'Extra turn lets you roll again immediately!', {
+        const hint = this.scene.add.text(cx, cy + 90, 'Extra turn lets you roll again immediately!', {
             fontSize: '14px',
             fontFamily: 'Arial',
             color: '#888888'
         }).setOrigin(0.5);
+        hint.setScrollFactor(0);
         this.abilityChoiceContainer.add(hint);
     }
 
@@ -1693,8 +1857,9 @@ class GameUI {
      * @param {Object} portal - Portal data from EncounterData
      * @param {Player} player - The player who landed on the portal
      * @param {Function} callback - Called with boolean (true = entered, false = skipped)
+     * @param {Object} prerolledEffect - Optional: Elara's scrying preview of the effect
      */
-    showPortalChoiceModal(portal, player, callback) {
+    showPortalChoiceModal(portal, player, callback, prerolledEffect = null) {
         this.isModalOpen = true;
         this.portalElements = [];
 
@@ -1710,9 +1875,10 @@ class GameUI {
         overlay.setInteractive();
         this.portalElements.push(overlay);
 
-        // Modal dimensions
+        // Modal dimensions - taller when Elara's scrying preview is shown
         const modalW = 450;
-        const modalH = 380;
+        const hasScrying = prerolledEffect && player.characterData && player.characterData.id === 'elara';
+        const modalH = hasScrying ? 450 : 380;
 
         // Portal color for theming
         const portalColor = portal.color || 0x8844ff;
@@ -1827,8 +1993,40 @@ class GameUI {
         risk.setScrollFactor(0);
         this.portalElements.push(risk);
 
+        // Elara's Scrying preview - show what effect would happen
+        let btnY = cy + 150;
+        if (hasScrying) {
+            const goodEffects = ['move', 'loot', 'armor', 'cleanse', 'none', 'buff', 'steal_item', 'double_roll'];
+            const isGood = goodEffects.includes(prerolledEffect.type) && (prerolledEffect.value === undefined || prerolledEffect.value > 0);
+            const previewColor = isGood ? '#44ff44' : '#ff4444';
+
+            const scryLabel = this.scene.add.text(cx, cy + 120, 'SCRYING REVEALS:', {
+                fontSize: '11px',
+                fontFamily: 'Arial',
+                color: '#aa88ff',
+                fontStyle: 'bold'
+            }).setOrigin(0.5);
+            scryLabel.setDepth(201);
+            scryLabel.setScrollFactor(0);
+            this.portalElements.push(scryLabel);
+
+            const scryText = this.scene.add.text(cx, cy + 140, prerolledEffect.message, {
+                fontSize: '12px',
+                fontFamily: 'Arial',
+                color: previewColor,
+                align: 'center',
+                wordWrap: { width: modalW - 60 }
+            }).setOrigin(0.5);
+            scryText.setDepth(201);
+            scryText.setScrollFactor(0);
+            this.portalElements.push(scryText);
+
+            // Push buttons below scrying text
+            btnY = cy + 190;
+        }
+
         // Enter button
-        const enterBtn = this.createButton(cx - 100, cy + 150, 'ENTER', () => {
+        const enterBtn = this.createButton(cx - 100, btnY, 'ENTER', () => {
             this.closePortalChoice();
             callback(true);
         }, portalColor);
@@ -1836,7 +2034,7 @@ class GameUI {
         this.portalElements.push(enterBtn);
 
         // Skip button
-        const skipBtn = this.createButton(cx + 100, cy + 150, 'SKIP', () => {
+        const skipBtn = this.createButton(cx + 100, btnY, 'SKIP', () => {
             this.closePortalChoice();
             callback(false);
         }, 0x666666);
@@ -1960,7 +2158,148 @@ class GameUI {
             this.rerollElements.forEach(el => el.destroy());
             this.rerollElements = null;
         }
+        // Clear any countdown timer
+        if (this.rerollCountdownTimer) {
+            clearInterval(this.rerollCountdownTimer);
+            this.rerollCountdownTimer = null;
+        }
+        this.spellScrollWindowActive = false;
         this.isModalOpen = false;
+    }
+
+    /**
+     * Show timed reroll popup with countdown
+     * @param {number} currentRoll - The current roll value
+     * @param {string} rollType - Type of roll (movement, encounter)
+     * @param {number} countdownSeconds - Seconds to countdown (default 3)
+     * @param {function} callback - Callback with {reroll: boolean, expired: boolean}
+     */
+    showTimedRerollChoice(currentRoll, rollType, countdownSeconds, callback) {
+        this.isModalOpen = true;
+        this.spellScrollWindowActive = true;
+        this.spellScrollCallback = callback;
+        this.rerollElements = [];
+
+        const screenW = this.scene.scale.width;
+        const screenH = this.scene.scale.height;
+        const cx = screenW / 2;
+        const cy = screenH / 2;
+
+        // Background overlay - semi-transparent, doesn't block game
+        const overlay = this.scene.add.rectangle(cx, cy, screenW * 2, screenH * 2, 0x000000, 0.4);
+        overlay.setDepth(199);
+        overlay.setScrollFactor(0);
+        overlay.setInteractive();
+        this.rerollElements.push(overlay);
+
+        // Compact notification bar at top
+        const barWidth = 320;
+        const barHeight = 80;
+        const barY = 60;
+
+        const barBg = this.scene.add.graphics();
+        barBg.fillStyle(0x0d0d1a, 0.95);
+        barBg.fillRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+        barBg.lineStyle(2, 0x9A4ADF, 1);
+        barBg.strokeRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+        barBg.setDepth(200);
+        barBg.setScrollFactor(0);
+        this.rerollElements.push(barBg);
+
+        // Spell scroll icon/title
+        const title = this.scene.add.text(cx - 100, barY - 20, '📜 SPELL SCROLL', {
+            fontSize: '16px',
+            fontFamily: 'Georgia, serif',
+            color: '#9A4ADF',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0, 0.5);
+        title.setDepth(200);
+        title.setScrollFactor(0);
+        this.rerollElements.push(title);
+
+        // Countdown timer text (large)
+        let timeLeft = countdownSeconds;
+        const timerText = this.scene.add.text(cx + 110, barY, timeLeft.toString(), {
+            fontSize: '36px',
+            fontFamily: 'Arial Black, sans-serif',
+            color: '#ffcc00',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+        timerText.setDepth(200);
+        timerText.setScrollFactor(0);
+        this.rerollElements.push(timerText);
+
+        // Instruction text
+        const instruction = this.scene.add.text(cx - 100, barY + 15, 'Click to REROLL or wait to keep', {
+            fontSize: '12px',
+            fontFamily: 'Arial',
+            color: '#aaaaaa'
+        }).setOrigin(0, 0.5);
+        instruction.setDepth(200);
+        instruction.setScrollFactor(0);
+        this.rerollElements.push(instruction);
+
+        // Make the bar clickable to reroll
+        const clickZone = this.scene.add.rectangle(cx, barY, barWidth, barHeight, 0xffffff, 0);
+        clickZone.setDepth(201);
+        clickZone.setScrollFactor(0);
+        clickZone.setInteractive({ useHandCursor: true });
+        clickZone.on('pointerover', () => {
+            barBg.clear();
+            barBg.fillStyle(0x1a1a2e, 0.95);
+            barBg.fillRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+            barBg.lineStyle(3, 0xBB6AF0, 1);
+            barBg.strokeRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+        });
+        clickZone.on('pointerout', () => {
+            barBg.clear();
+            barBg.fillStyle(0x0d0d1a, 0.95);
+            barBg.fillRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+            barBg.lineStyle(2, 0x9A4ADF, 1);
+            barBg.strokeRoundedRect(cx - barWidth/2, barY - barHeight/2, barWidth, barHeight, 12);
+        });
+        clickZone.on('pointerdown', () => {
+            this.closeRerollChoice();
+            callback({ reroll: true, expired: false });
+        });
+        this.rerollElements.push(clickZone);
+
+        // Countdown timer
+        this.rerollCountdownTimer = setInterval(() => {
+            timeLeft--;
+            if (timeLeft > 0) {
+                timerText.setText(timeLeft.toString());
+                // Flash effect as time runs out
+                if (timeLeft <= 1) {
+                    timerText.setColor('#ff6666');
+                }
+            } else {
+                // Time's up - keep the roll
+                this.closeRerollChoice();
+                callback({ reroll: false, expired: true });
+            }
+        }, 1000);
+    }
+
+    /**
+     * Check if spell scroll window is currently active
+     * @returns {boolean} Whether the spell scroll usage window is open
+     */
+    isSpellScrollWindowActive() {
+        return this.spellScrollWindowActive === true;
+    }
+
+    /**
+     * Trigger spell scroll use from inventory click
+     */
+    triggerSpellScrollUse() {
+        if (this.spellScrollWindowActive && this.spellScrollCallback) {
+            const callback = this.spellScrollCallback;
+            this.closeRerollChoice();
+            callback({ reroll: true, expired: false });
+        }
     }
 
     /**

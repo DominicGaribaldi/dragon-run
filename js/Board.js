@@ -135,25 +135,59 @@ class Board {
         const encounter6 = pickInZone(zones.late, usedTiles);
         usedTiles.push(encounter6);
 
-        // SPECIAL TILES (Chests, Anvil, Portals) - 4 chests for 100 tiles
+        // SPECIAL TILES (Chests, Anvil, Portals) - 8 chests for 100 tiles (doubled!)
         const chest1 = pickInZone(zones.veryEarly, usedTiles);
         usedTiles.push(chest1);
-        const chest2 = pickInZone(zones.earlyMid, usedTiles);
+        const chest2 = pickInZone(zones.veryEarly, usedTiles);
         usedTiles.push(chest2);
+        const chest3 = pickInZone(zones.early, usedTiles);
+        usedTiles.push(chest3);
+        const chest4 = pickInZone(zones.earlyMid, usedTiles);
+        usedTiles.push(chest4);
         const anvil = pickInZone(zones.mid, usedTiles);
         usedTiles.push(anvil);
-        const chest3 = pickInZone(zones.lateMid, usedTiles);
-        usedTiles.push(chest3);
-        const chest4 = pickInZone(zones.veryLate, usedTiles);
-        usedTiles.push(chest4);
+        const chest5 = pickInZone(zones.mid, usedTiles);
+        usedTiles.push(chest5);
+        const chest6 = pickInZone(zones.lateMid, usedTiles);
+        usedTiles.push(chest6);
+        const chest7 = pickInZone(zones.late, usedTiles);
+        usedTiles.push(chest7);
+        const chest8 = pickInZone(zones.veryLate, usedTiles);
+        usedTiles.push(chest8);
 
-        // THREE PORTAL TYPES - spread across the board
-        const portalBalanced = pickInZone(zones.earlyMid, usedTiles); // Green - safe early game
-        usedTiles.push(portalBalanced);
-        const portalRisky = pickInZone(zones.mid, usedTiles); // Purple - mid game gamble
-        usedTiles.push(portalRisky);
-        const portalChaotic = pickInZone(zones.late, usedTiles); // Red - late game chaos
-        usedTiles.push(portalChaotic);
+        // PORTAL TYPES - random 1-3 of each type spread across the board
+        // Helper to pick multiple tiles in a zone
+        const pickMultipleInZone = (zones, count, exclude) => {
+            const tiles = [];
+            for (let i = 0; i < count; i++) {
+                const zone = zones[i % zones.length]; // Cycle through zones
+                const tile = pickInZone(zone, exclude);
+                tiles.push(tile);
+                exclude.push(tile);
+            }
+            return tiles;
+        };
+
+        // Random 1-3 of each portal type
+        const balancedCount = Math.floor(Math.random() * 3) + 1; // 1-3
+        const riskyCount = Math.floor(Math.random() * 3) + 1;
+        const chaoticCount = Math.floor(Math.random() * 3) + 1;
+
+        // Spread portals across appropriate zones
+        const portalBalancedTiles = pickMultipleInZone(
+            [zones.veryEarly, zones.early, zones.earlyMid],
+            balancedCount, usedTiles
+        ); // Green - safe early game
+
+        const portalRiskyTiles = pickMultipleInZone(
+            [zones.earlyMid, zones.mid, zones.lateMid],
+            riskyCount, usedTiles
+        ); // Purple - mid game gamble
+
+        const portalChaoticTiles = pickMultipleInZone(
+            [zones.lateMid, zones.late, zones.veryLate],
+            chaoticCount, usedTiles
+        ); // Red - late game chaos
 
         // Store the procedural assignments for EncounterData to reference
         this.proceduralAssignments = {
@@ -176,11 +210,11 @@ class Board {
                 vampires: encounter6
             },
             special: {
-                chests: [chest1, chest2, chest3, chest4],
+                chests: [chest1, chest2, chest3, chest4, chest5, chest6, chest7, chest8],
                 anvil: anvil,
-                portalBalanced: portalBalanced,
-                portalRisky: portalRisky,
-                portalChaotic: portalChaotic
+                portalBalancedTiles: portalBalancedTiles,
+                portalRiskyTiles: portalRiskyTiles,
+                portalChaoticTiles: portalChaoticTiles
             }
         };
 
@@ -229,12 +263,17 @@ class Board {
             special: {
                 [chest1]: { name: "Treasure Chest" },
                 [chest2]: { name: "Treasure Chest" },
-                [anvil]: { name: "Rusty Anvil" },
                 [chest3]: { name: "Treasure Chest" },
-                [portalBalanced]: { name: "Balanced Portal" },
-                [portalRisky]: { name: "Risky Portal" },
-                [portalChaotic]: { name: "Chaotic Portal" },
-                [chest4]: { name: "Treasure Chest" }
+                [chest4]: { name: "Treasure Chest" },
+                [anvil]: { name: "Rusty Anvil" },
+                [chest5]: { name: "Treasure Chest" },
+                [chest6]: { name: "Treasure Chest" },
+                [chest7]: { name: "Treasure Chest" },
+                [chest8]: { name: "Treasure Chest" },
+                // Add all portal tiles dynamically
+                ...Object.fromEntries(portalBalancedTiles.map(t => [t, { name: "Stable Portal" }])),
+                ...Object.fromEntries(portalRiskyTiles.map(t => [t, { name: "Gambler's Gate" }])),
+                ...Object.fromEntries(portalChaoticTiles.map(t => [t, { name: "Chaos Rift" }]))
             }
         };
     }
@@ -275,9 +314,10 @@ class Board {
             special: {
                 chests: serverAssignments.specials.filter(s => s.type === 'chest').map(s => s.tile),
                 anvil: serverAssignments.specials.find(s => s.type === 'anvil')?.tile,
-                portalBalanced: serverAssignments.portals.find(p => p.type === 'balanced')?.tile,
-                portalRisky: serverAssignments.portals.find(p => p.type === 'risky')?.tile,
-                portalChaotic: serverAssignments.portals.find(p => p.type === 'chaotic')?.tile
+                // Portal arrays - server can send multiple tiles per portal type
+                portalBalancedTiles: serverAssignments.portals.filter(p => p.type === 'balanced').map(p => p.tile),
+                portalRiskyTiles: serverAssignments.portals.filter(p => p.type === 'risky').map(p => p.tile),
+                portalChaoticTiles: serverAssignments.portals.filter(p => p.type === 'chaotic').map(p => p.tile)
             }
         };
 
@@ -333,18 +373,18 @@ class Board {
         EncounterData.special.rustyAnvil.tile = pa.special.anvil;
         EncounterData.special.lootChest.tiles = pa.special.chests;
 
-        // Update portal tiles
-        EncounterData.special.portalBalanced.tile = pa.special.portalBalanced;
-        EncounterData.special.portalRisky.tile = pa.special.portalRisky;
-        EncounterData.special.portalChaotic.tile = pa.special.portalChaotic;
+        // Update portal tiles (now arrays for multiple portals of each type)
+        EncounterData.special.portalBalanced.tiles = pa.special.portalBalancedTiles;
+        EncounterData.special.portalRisky.tiles = pa.special.portalRiskyTiles;
+        EncounterData.special.portalChaotic.tiles = pa.special.portalChaoticTiles;
 
         console.log('[Board] Updated EncounterData with procedural positions');
         console.log('[Board] Knights:', pa.knights);
         console.log('[Board] Dragons:', pa.dragons);
         console.log('[Board] Portals:', {
-            balanced: pa.special.portalBalanced,
-            risky: pa.special.portalRisky,
-            chaotic: pa.special.portalChaotic
+            balanced: pa.special.portalBalancedTiles,
+            risky: pa.special.portalRiskyTiles,
+            chaotic: pa.special.portalChaoticTiles
         });
     }
 
@@ -1308,7 +1348,7 @@ class Board {
         }
 
         const pa = this.proceduralAssignments.special;
-        console.log('[Board] Portal tiles:', pa.portalBalanced, pa.portalRisky, pa.portalChaotic);
+        console.log('[Board] Portal tiles:', pa.portalBalancedTiles, pa.portalRiskyTiles, pa.portalChaoticTiles);
 
         // Draw treasure chests
         if (pa.chests) {
@@ -1375,10 +1415,22 @@ class Board {
             }
         }
 
-        // Draw portals - three types with different colors
-        this.drawPortal(pa.portalBalanced, EncounterData.special.portalBalanced);
-        this.drawPortal(pa.portalRisky, EncounterData.special.portalRisky);
-        this.drawPortal(pa.portalChaotic, EncounterData.special.portalChaotic);
+        // Draw portals - three types with different colors (1-3 of each type)
+        if (pa.portalBalancedTiles) {
+            pa.portalBalancedTiles.forEach(tileNum => {
+                this.drawPortal(tileNum, EncounterData.special.portalBalanced);
+            });
+        }
+        if (pa.portalRiskyTiles) {
+            pa.portalRiskyTiles.forEach(tileNum => {
+                this.drawPortal(tileNum, EncounterData.special.portalRisky);
+            });
+        }
+        if (pa.portalChaoticTiles) {
+            pa.portalChaoticTiles.forEach(tileNum => {
+                this.drawPortal(tileNum, EncounterData.special.portalChaotic);
+            });
+        }
     }
 
     /**

@@ -15,8 +15,16 @@ const CharacterData = {
             preferredStat: 'defense',
             passive: {
                 name: 'Ironclad',
-                description: 'Ignore the first 3 spaces of any slide-back effect (Dragon or Hazard).',
-                icon: 'shield'
+                description: 'Reduce all slide/knockback by 3. +1 dragon defense.',
+                icon: 'shield',
+                slideReduction: 3,
+                dragonBonus: 1
+            },
+            passive2: {
+                name: 'Shield Wall',
+                description: 'Once per game, completely block a negative portal effect.',
+                icon: 'shield',
+                uses: 1
             },
             stats: {
                 defense: 5,
@@ -39,9 +47,15 @@ const CharacterData = {
             preferredStat: 'magic',
             passive: {
                 name: 'Arcane Insight',
-                description: 'Once per game, swap your dice roll with the player behind you.',
+                description: '2x per game: swap roll with player behind you. +1 next roll.',
                 icon: 'wand',
-                usesRemaining: 1
+                usesRemaining: 2,
+                bonusAfterUse: 1
+            },
+            passive2: {
+                name: 'Scrying',
+                description: 'See what portal effect you would get before choosing to enter.',
+                icon: 'eye'
             },
             stats: {
                 defense: 1,
@@ -64,8 +78,14 @@ const CharacterData = {
             preferredStat: 'agility',
             passive: {
                 name: 'Parkour',
-                description: 'If you roll a 6, choose to move 6 spaces OR move 3 spaces and take another turn.',
+                description: 'On a 6: move 6 OR move 3 and take another turn.',
                 icon: 'arrow'
+            },
+            passive2: {
+                name: 'Evasion',
+                description: 'First monster encounter each game automatically succeeds.',
+                icon: 'dodge',
+                uses: 1
             },
             stats: {
                 defense: 2,
@@ -88,8 +108,17 @@ const CharacterData = {
             preferredStat: 'charisma',
             passive: {
                 name: 'Royal Tax',
-                description: 'Start with 1 random Power-Up. When landing on Loot, gain 2 items instead of 1.',
-                icon: 'crown'
+                description: 'Start on tile 5 with 1 item + 2 Armor. 2x items from loot.',
+                icon: 'crown',
+                startTile: 5,
+                startArmor: 2,
+                doubleItems: true
+            },
+            passive2: {
+                name: 'Royal Decree',
+                description: 'Once per game, completely skip a monster encounter.',
+                icon: 'scroll',
+                uses: 1
             },
             stats: {
                 defense: 2,
@@ -112,8 +141,16 @@ const CharacterData = {
             preferredStat: 'engineering',
             passive: {
                 name: 'Shortcuts',
-                description: 'When using a Knight (Ladder), move an additional +2 spaces after landing.',
-                icon: 'gear'
+                description: 'Knight boosts give +4 extra. Immune to ice slip.',
+                icon: 'gear',
+                knightBonus: 4,
+                iceImmune: true
+            },
+            passive2: {
+                name: 'Reinforced',
+                description: 'Armor Shards protect against 2 dragon/monster hits instead of 1.',
+                icon: 'anvil',
+                armorBonus: true
             },
             stats: {
                 defense: 3,
@@ -136,8 +173,17 @@ const CharacterData = {
             preferredStat: 'luck',
             passive: {
                 name: 'Distraction',
-                description: 'Monster Encounters succeed on 3-6 instead of 4-6.',
-                icon: 'music'
+                description: 'Monster checks 2-6. First stun blocked. +1 portal rolls.',
+                icon: 'music',
+                monsterBonus: 2,
+                stunImmune: true,
+                portalBonus: 1
+            },
+            passive2: {
+                name: 'Lucky Reroll',
+                description: 'Once per game, reroll any dice result of 1 or 2.',
+                icon: 'dice',
+                uses: 1
             },
             stats: {
                 defense: 1,
