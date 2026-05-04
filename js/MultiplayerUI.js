@@ -8,6 +8,11 @@ class MultiplayerUI {
         this.networkManager = null;
         this.onModeSelected = null;
         this.onGameReady = null;
+        // Track NetworkManager subscriptions so we can detach them on screen
+        // transitions. Without this, every visit to the lobby stacks another
+        // copy of the same handler — a slow leak that also causes duplicate
+        // calls (e.g. updateLobbyPlayers fired 4 times for one event).
+        this._netListeners = [];
     }
 
     /**
@@ -15,6 +20,27 @@ class MultiplayerUI {
      */
     setNetworkManager(networkManager) {
         this.networkManager = networkManager;
+    }
+
+    /**
+     * Subscribe to a NetworkManager event and remember the binding so we can
+     * detach on clearElements(). Use this in place of networkManager.on(...).
+     */
+    _addNetListener(event, handler) {
+        if (!this.networkManager) return;
+        this.networkManager.on(event, handler);
+        this._netListeners.push({ event, handler });
+    }
+
+    /**
+     * Detach every NetworkManager subscription added via _addNetListener.
+     */
+    _clearNetListeners() {
+        if (!this._netListeners || !this.networkManager) return;
+        for (const { event, handler } of this._netListeners) {
+            this.networkManager.off(event, handler);
+        }
+        this._netListeners = [];
     }
 
     /**
@@ -237,11 +263,11 @@ class MultiplayerUI {
         try {
             await this.networkManager.connect();
 
-            this.networkManager.on('roomCreated', (data) => {
+            this._addNetListener('roomCreated', (data) => {
                 this.showLobby(data.roomCode, [], true);
             });
 
-            this.networkManager.on('error', (data) => {
+            this._addNetListener('error', (data) => {
                 this.showError(data.message);
             });
 
@@ -260,11 +286,11 @@ class MultiplayerUI {
         try {
             await this.networkManager.connect();
 
-            this.networkManager.on('roomJoined', (data) => {
+            this._addNetListener('roomJoined', (data) => {
                 this.showLobby(data.roomCode, data.players, false);
             });
 
-            this.networkManager.on('error', (data) => {
+            this._addNetListener('error', (data) => {
                 this.showError(data.message);
             });
 
@@ -368,20 +394,20 @@ class MultiplayerUI {
         this.playerListX = centerX - panelW/2 + 30;
         this.updateLobbyPlayers(players);
 
-        // Setup listeners for player updates
-        this.networkManager.on('playerJoined', (data) => {
+        // Setup listeners for player updates (auto-detached on next clearElements)
+        this._addNetListener('playerJoined', (data) => {
             this.updateLobbyPlayers(data.players);
         });
 
-        this.networkManager.on('playerLeft', (data) => {
+        this._addNetListener('playerLeft', (data) => {
             this.updateLobbyPlayers(data.players);
         });
 
-        this.networkManager.on('characterSelected', (data) => {
+        this._addNetListener('characterSelected', (data) => {
             this.updateLobbyPlayers(data.players);
         });
 
-        this.networkManager.on('gameStarted', (data) => {
+        this._addNetListener('gameStarted', (data) => {
             this.clearElements();
             if (this.onGameReady) {
                 this.onGameReady(data);
@@ -554,9 +580,12 @@ class MultiplayerUI {
     }
 
     /**
-     * Clear all UI elements
+     * Clear all UI elements and detach any NetworkManager subscriptions
+     * registered for this screen.
      */
     clearElements() {
+        this._clearNetListeners();
+
         this.elements.forEach(el => {
             if (el && el.destroy) {
                 el.destroy();

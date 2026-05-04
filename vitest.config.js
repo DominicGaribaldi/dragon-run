@@ -8,7 +8,8 @@ export default defineConfig({
         // Include patterns
         include: [
             'tests/unit/**/*.test.js',
-            'tests/integration/**/*.test.js'
+            'tests/integration/**/*.test.js',
+            'tests/server/**/*.test.js'
         ],
 
         // Exclude patterns

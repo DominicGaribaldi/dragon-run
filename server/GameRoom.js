@@ -12,10 +12,21 @@ function rollDie() {
     return randomInt(1, 7); // returns 1..6 inclusive
 }
 
+// Active items can only be used by the current player. Passive items
+// (armor_shard, holy_shield) auto-trigger on the relevant encounter.
+const ACTIVE_ITEM_IDS = new Set(['speed_potion', 'spell_scroll', 'smoke_bomb']);
+
+// Auto-resolve any pending action this many ms after it's set. Without this
+// a disconnected or unresponsive client wedges the room forever.
+const PENDING_STATE_TIMEOUT_MS = 60_000;
+
 export class GameRoom {
-    constructor(roomCode, hostSocketId) {
+    constructor(roomCode, hostSocketId, io = null) {
         this.roomCode = roomCode;
         this.hostSocketId = hostSocketId;
+        // Optional Socket.io reference for broadcasting timeout-driven events.
+        // RoomManager passes it through; tests can omit it.
+        this.io = io;
         this.players = new Map(); // socketId -> PlayerState
         this.playerOrder = []; // Array of socketIds in turn order
         this.board = null;
@@ -24,7 +35,48 @@ export class GameRoom {
         this.lastActivity = Date.now();
         this.pendingRoll = null; // Stores roll waiting for movement processing
         this.pendingEncounter = null; // Stores encounter waiting for resolution
+        this.pendingTimer = null; // Timer that fires if pendingRoll/Encounter sits too long
         this.gameLogic = new GameLogic();
+    }
+
+    // ---- Pending-state timer ------------------------------------------------
+    // Whenever we set pendingRoll or pendingEncounter, start a timer. If the
+    // owning client never responds (disconnected, crashed, malicious) we
+    // auto-resolve and advance the turn so the room doesn't wedge.
+
+    _armPendingTimer(reason) {
+        this._clearPendingTimer();
+        this.pendingTimer = setTimeout(() => this._handlePendingTimeout(reason), PENDING_STATE_TIMEOUT_MS);
+    }
+
+    _clearPendingTimer() {
+        if (this.pendingTimer) {
+            clearTimeout(this.pendingTimer);
+            this.pendingTimer = null;
+        }
+    }
+
+    _handlePendingTimeout(reason) {
+        // Auto-resolve: drop pending state, advance turn, broadcast.
+        this.pendingTimer = null;
+        const expiredSocketId = this.pendingRoll?.socketId || this.pendingEncounter?.socketId;
+        const expiredPlayer = expiredSocketId ? this.players.get(expiredSocketId) : null;
+        this.pendingRoll = null;
+        this.pendingEncounter = null;
+        const advanced = this.advanceTurn();
+
+        if (this.io && expiredPlayer) {
+            this.io.to(this.roomCode).emit('turn_timeout', {
+                playerNumber: expiredPlayer.playerNumber,
+                reason
+            });
+            this.io.to(this.roomCode).emit('turn_complete', {
+                playerStates: this.getPlayerStates(),
+                currentPlayerIndex: this.currentPlayerIndex,
+                gameEnded: !advanced || this.gameState === 'ended',
+                winner: null
+            });
+        }
     }
 
     /**
@@ -54,6 +106,9 @@ export class GameRoom {
             hasWon: false,
             connected: true,
             arcaneInsightUsed: false,
+            // Modifiers stashed by useItem(), consumed at the next relevant
+            // event (e.g. roll_bonus is consumed by the next rollDice).
+            pendingModifiers: [],
             reconnectToken
         });
         this.playerOrder.push(socketId);
@@ -140,6 +195,13 @@ export class GameRoom {
      * Select a character for a player
      */
     selectCharacter(socketId, characterId) {
+        // Only allow character selection while the room is in the lobby.
+        // Mid-game re-selection would mutate identity (and thus passive
+        // abilities) under the rest of the game state.
+        if (this.gameState !== 'lobby') {
+            return { success: false, error: 'Cannot change character mid-game' };
+        }
+
         const player = this.players.get(socketId);
         if (!player) {
             return { success: false, error: 'Player not found' };
@@ -246,6 +308,22 @@ export class GameRoom {
             player.statusEffects.reversed = false;
         }
 
+        // Consume any roll_bonus modifiers stashed by useItem() (e.g. Speed
+        // Potion). We previously discarded these — Speed Potion's +2 was a
+        // silent no-op server-side.
+        if (player.pendingModifiers && player.pendingModifiers.length > 0) {
+            const remaining = [];
+            for (const mod of player.pendingModifiers) {
+                if (mod && mod.type === 'roll_bonus' && typeof mod.value === 'number') {
+                    modifiedRoll += mod.value;
+                    modifiers.itemBonus = (modifiers.itemBonus || 0) + mod.value;
+                } else {
+                    remaining.push(mod);
+                }
+            }
+            player.pendingModifiers = remaining;
+        }
+
         // Store pending roll for movement processing
         this.pendingRoll = {
             socketId,
@@ -253,6 +331,7 @@ export class GameRoom {
             modifiedRoll,
             modifiers
         };
+        this._armPendingTimer('roll');
 
         this.lastActivity = Date.now();
 
@@ -280,22 +359,24 @@ export class GameRoom {
 
         const { modifiedRoll } = this.pendingRoll;
 
-        // Calculate new tile
+        // Calculate new tile. modifiedRoll may be negative when the player is
+        // reversed; addition handles both cases (50 + (-3) = 47).
         let newTile = player.currentTile + modifiedRoll;
 
-        // Bounce back from end
-        if (newTile > 100) {
-            newTile = 100 - (newTile - 100);
-        }
-        if (newTile < 1) {
-            newTile = 1;
-        }
+        // Crossing the finish line wins — no exact-roll requirement. Without
+        // this clamp the previous bounce-back left a player at 96 unable to
+        // win on a roll of 5 (101 -> 99), which was confusing and fought the
+        // documented spec.
+        const isWin = newTile >= 100;
+        if (isWin) newTile = 100;
+        if (newTile < 1) newTile = 1;
 
         player.currentTile = newTile;
         this.pendingRoll = null;
+        this._clearPendingTimer();
 
         // Check for win
-        if (newTile === 100) {
+        if (isWin) {
             player.hasWon = true;
             this.gameState = 'ended';
             return {
@@ -316,6 +397,7 @@ export class GameRoom {
                 encounter,
                 tile: newTile
             };
+            this._armPendingTimer('encounter');
             return {
                 success: true,
                 playerNumber: player.playerNumber,
@@ -332,7 +414,7 @@ export class GameRoom {
             playerNumber: player.playerNumber,
             playerStates: this.getPlayerStates(),
             currentPlayerIndex: this.currentPlayerIndex,
-            gameEnded: false
+            gameEnded: this.gameState === 'ended'
         };
     }
 
@@ -369,6 +451,7 @@ export class GameRoom {
         }
 
         this.pendingEncounter = null;
+        this._clearPendingTimer();
 
         // Check for win after encounter (e.g., knight boost)
         if (player.currentTile >= 100) {
@@ -406,7 +489,10 @@ export class GameRoom {
     }
 
     /**
-     * Use an item
+     * Use an item. Active items (Speed Potion, Spell Scroll, Smoke Bomb)
+     * are turn-modifying and may only be played by the current player.
+     * Passive items (Armor Shard, Holy Shield) auto-trigger and don't go
+     * through this path.
      */
     useItem(socketId, itemId) {
         const player = this.players.get(socketId);
@@ -419,27 +505,56 @@ export class GameRoom {
             return { success: false, error: 'Item not in inventory' };
         }
 
-        const effect = this.gameLogic.useItem(itemId, player);
+        if (ACTIVE_ITEM_IDS.has(itemId)) {
+            const currentSocketId = this.playerOrder[this.currentPlayerIndex];
+            if (socketId !== currentSocketId) {
+                return { success: false, error: 'Active items can only be used on your turn' };
+            }
+        }
+
+        const result = this.gameLogic.useItem(itemId, player);
         player.inventory.splice(itemIndex, 1);
+
+        // Persist any returned modifier on the player so it can be consumed
+        // by the next relevant event (e.g. roll_bonus is read by rollDice).
+        if (result && result.modifier) {
+            player.pendingModifiers = player.pendingModifiers || [];
+            player.pendingModifiers.push(result.modifier);
+        }
 
         this.lastActivity = Date.now();
 
         return {
             success: true,
             playerNumber: player.playerNumber,
-            effect,
+            effect: result,
             playerState: this.getPlayerState(socketId)
         };
     }
 
     /**
-     * Handle portal choice
+     * Handle portal choice. Requires a matching pendingEncounter — without
+     * the ownership check a malicious client could spam portal_choice
+     * out-of-turn and (via advanceTurn) skip another player's turn.
      */
     handlePortalChoice(socketId, enter) {
         const player = this.players.get(socketId);
         if (!player) {
             return { success: false, error: 'Player not found' };
         }
+
+        if (!this.pendingEncounter || this.pendingEncounter.socketId !== socketId) {
+            return { success: false, error: 'No pending portal choice' };
+        }
+        const isPortal = this.pendingEncounter.encounter
+            && (this.pendingEncounter.encounter.type === 'portal'
+                || this.pendingEncounter.encounter.kind === 'portal');
+        if (!isPortal) {
+            return { success: false, error: 'Pending encounter is not a portal' };
+        }
+
+        this.pendingEncounter = null;
+        this._clearPendingTimer();
 
         if (!enter) {
             // Player declined portal
@@ -450,11 +565,11 @@ export class GameRoom {
                 newTile: player.currentTile,
                 playerStates: this.getPlayerStates(),
                 currentPlayerIndex: this.currentPlayerIndex,
-                gameEnded: false
+                gameEnded: this.gameState === 'ended'
             };
         }
 
-        // Process portal (simplified - would need portal type from pendingEncounter)
+        // Process portal
         const portalResult = this.gameLogic.usePortal(player.currentTile, this.board);
         player.currentTile = portalResult.newTile;
 
@@ -480,7 +595,10 @@ export class GameRoom {
     }
 
     /**
-     * Handle reroll choice (spell scroll)
+     * Handle reroll choice (spell scroll). Requires a matching pendingRoll
+     * AND that the player actually owns a spell_scroll — without these checks
+     * a client without the item could spam reroll_choice and replace any
+     * roll, and a non-current player could mess with the active player's roll.
      */
     handleRerollChoice(socketId, reroll) {
         const player = this.players.get(socketId);
@@ -488,17 +606,22 @@ export class GameRoom {
             return { success: false, error: 'Player not found' };
         }
 
+        if (!this.pendingRoll || this.pendingRoll.socketId !== socketId) {
+            return { success: false, error: 'No pending roll to reroll' };
+        }
+
         if (!reroll) {
             return { success: true, playerNumber: player.playerNumber };
         }
 
-        // Remove spell scroll from inventory
         const scrollIndex = player.inventory.indexOf('spell_scroll');
-        if (scrollIndex !== -1) {
-            player.inventory.splice(scrollIndex, 1);
+        if (scrollIndex === -1) {
+            return { success: false, error: 'No spell scroll in inventory' };
         }
+        player.inventory.splice(scrollIndex, 1);
 
-        // New roll (crypto-strong)
+        // New roll (crypto-strong) — replaces the existing pending roll and
+        // re-arms its timeout.
         const roll = rollDie();
         this.pendingRoll = {
             socketId,
@@ -506,6 +629,7 @@ export class GameRoom {
             modifiedRoll: roll,
             modifiers: { reroll: true }
         };
+        this._armPendingTimer('reroll');
 
         return {
             success: true,
@@ -516,11 +640,20 @@ export class GameRoom {
     }
 
     /**
-     * Advance to the next player's turn
+     * Advance to the next player's turn. Returns true if an eligible player
+     * was found, false if every remaining player is disconnected or has won
+     * (in which case the game ends rather than spinning on an unreachable
+     * currentPlayerIndex).
      */
     advanceTurn() {
+        if (this.playerOrder.length === 0) {
+            this.gameState = 'ended';
+            return false;
+        }
+
         let nextIndex = (this.currentPlayerIndex + 1) % this.playerOrder.length;
         let attempts = 0;
+        let found = false;
 
         // Skip disconnected players and winners
         while (attempts < this.playerOrder.length) {
@@ -528,6 +661,7 @@ export class GameRoom {
             const nextPlayer = this.players.get(nextSocketId);
 
             if (nextPlayer && nextPlayer.connected && !nextPlayer.hasWon) {
+                found = true;
                 break;
             }
 
@@ -535,8 +669,52 @@ export class GameRoom {
             attempts++;
         }
 
+        if (!found) {
+            // Nobody can take a turn (everyone disconnected or already won).
+            // End the game instead of leaving the room wedged.
+            this.gameState = 'ended';
+            this.lastActivity = Date.now();
+            return false;
+        }
+
         this.currentPlayerIndex = nextIndex;
         this.lastActivity = Date.now();
+        return true;
+    }
+
+    /**
+     * Handle a player disconnecting. If they were the active player or held
+     * pending state, clear the pending state and advance the turn so the room
+     * doesn't wedge. Returns whether the turn was advanced (callers should
+     * broadcast turn_complete in that case).
+     */
+    handlePlayerDisconnect(socketId) {
+        const player = this.players.get(socketId);
+        if (!player) return { advanced: false };
+
+        player.connected = false;
+        this.lastActivity = Date.now();
+
+        if (this.gameState !== 'playing') {
+            return { advanced: false, playerNumber: player.playerNumber };
+        }
+
+        const wasCurrent = this.playerOrder[this.currentPlayerIndex] === socketId;
+        const ownsPendingRoll = this.pendingRoll && this.pendingRoll.socketId === socketId;
+        const ownsPendingEncounter = this.pendingEncounter && this.pendingEncounter.socketId === socketId;
+
+        if (ownsPendingRoll || ownsPendingEncounter) {
+            this.pendingRoll = null;
+            this.pendingEncounter = null;
+            this._clearPendingTimer();
+        }
+
+        let advanced = false;
+        if (wasCurrent || ownsPendingRoll || ownsPendingEncounter) {
+            advanced = this.advanceTurn();
+        }
+
+        return { advanced, playerNumber: player.playerNumber };
     }
 
     /**

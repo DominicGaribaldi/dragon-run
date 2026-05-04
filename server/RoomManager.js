@@ -42,7 +42,7 @@ export class RoomManager {
         }
 
         const roomCode = this.generateRoomCode();
-        const room = new GameRoom(roomCode, hostSocketId);
+        const room = new GameRoom(roomCode, hostSocketId, this.io);
         const { reconnectToken } = room.addPlayer(hostSocketId, playerName, true);
 
         this.rooms.set(roomCode, room);
@@ -329,7 +329,10 @@ export class RoomManager {
     }
 
     /**
-     * Handle disconnect
+     * Handle disconnect. If the disconnected player held the active turn or
+     * pending state, GameRoom.handlePlayerDisconnect will advance the turn
+     * for us; we surface that via `turnAdvanced` so the caller can broadcast
+     * turn_complete (otherwise the room wedges with nobody able to act).
      */
     handleDisconnect(socketId) {
         const roomCode = this.socketToRoom.get(socketId);
@@ -343,22 +346,43 @@ export class RoomManager {
             return { roomCode: null };
         }
 
-        const playerNumber = room.markDisconnected(socketId);
-        this.socketToRoom.delete(socketId);
+        let playerNumber = null;
+        let turnAdvanced = false;
+        let playerStates = null;
+        let currentPlayerIndex = null;
+        let gameEnded = false;
 
-        // If in lobby, remove player; if in game, mark as disconnected
         if (room.gameState === 'lobby') {
+            playerNumber = room.markDisconnected(socketId);
+            // In lobby: remove the seat entirely.
             room.removePlayer(socketId);
             if (room.getPlayerCount() === 0) {
                 this.rooms.delete(roomCode);
                 console.log(`[RoomManager] Room ${roomCode} deleted (empty)`);
             }
+        } else {
+            // Mid-game: mark disconnected, clear any pending state they held,
+            // and advance the turn if they were holding it.
+            const result = room.handlePlayerDisconnect(socketId);
+            playerNumber = result.playerNumber;
+            turnAdvanced = result.advanced;
+            if (turnAdvanced) {
+                playerStates = room.getPlayerStates();
+                currentPlayerIndex = room.currentPlayerIndex;
+                gameEnded = room.gameState === 'ended';
+            }
         }
+
+        this.socketToRoom.delete(socketId);
 
         return {
             roomCode,
             playerNumber,
-            players: room.getPlayersInfo()
+            players: room.getPlayersInfo(),
+            turnAdvanced,
+            playerStates,
+            currentPlayerIndex,
+            gameEnded
         };
     }
 
