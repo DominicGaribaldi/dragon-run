@@ -227,8 +227,8 @@ const EncounterData = {
             description: 'A hidden forge. The blacksmith offers to repair your gear!',
             effect: {
                 type: 'gain_armor',
-                value: 1,
-                message: 'The blacksmith forges you an Armor Shard!'
+                value: 3, // matches GAME_GUIDE.md ("Gain 3 Armor Shards")
+                message: 'The blacksmith forges you 3 Armor Shards!'
             }
         },
 

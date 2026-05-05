@@ -2622,8 +2622,11 @@ async function processMovementRoll(currentPlayer, rollValue) {
         await delay(800);
     }
     if (wasSlowed) {
-        const slowedValue = Math.floor(rollValue * 0.5);
-        gameUI.showToast(`SLOWED! Movement halved: ${rollValue} → ${Math.max(1, slowedValue)}`, 'warning');
+        // Show the actual final value modifyRoll arrived at (it factors in any
+        // burn applied earlier). Previously the toast computed from the raw
+        // rollValue, so a burned+slowed roll of 6 mis-reported "halved 6 → 3"
+        // when the player actually moved 2.
+        gameUI.showToast(`SLOWED! Movement halved: ${rollValue} → ${Math.max(1, modifiedRoll)}`, 'warning');
         await delay(800);
     }
     if (wasReversed) {
@@ -2645,8 +2648,10 @@ async function processMovementRoll(currentPlayer, rollValue) {
         currentPlayer.arcaneInsightBonus = 0; // Clear after use
     }
 
-    // Check for Kaelen's Parkour ability (roll of 6 gives choice)
-    if (currentPlayer.hasParkourChoice(rollValue)) {
+    // Check for Kaelen's Parkour ability (final roll of 6 gives choice).
+    // Use modifiedRoll so a burned Kaelen rolling 6 (modifiedRoll 5) does
+    // NOT get parkour, while an Arcane-Insight bonus that lands on 6 does.
+    if (currentPlayer.hasParkourChoice(modifiedRoll)) {
         // Show modal for Parkour choice and wait for selection
         gameUI.showParkourChoice(async (choice) => {
             modifiedRoll = choice.spaces;
@@ -2683,7 +2688,9 @@ async function processMovementRoll(currentPlayer, rollValue) {
                 console.error('[Game] Error in dragon zone check:', err);
             }
 
-            if (result && result.effect && result.effect.type !== 'dragon') {
+            // Skip the landing-tile effect when the dragon zone handler already
+            // moved the player off the originally-landed tile.
+            if (result && result.effect && result.effect.type !== 'dragon' && !dragonHandled) {
                 await handleTileEffect(currentPlayer, result.effect);
             }
             await checkForEncounters(currentPlayer, dragonHandled);
@@ -2748,9 +2755,13 @@ async function processMovementRoll(currentPlayer, rollValue) {
         console.error('[Game] Error in dragon zone check:', err);
     }
 
-    // Handle any special tile effects/encounters (like knight boost)
-    if (result && result.effect && result.effect.type !== 'dragon') {
-        // Skip dragon effects here since we handle them above
+    // Handle any special tile effects/encounters (like knight boost). When
+    // the dragon-zone-pass handler already moved the player back to the
+    // dragon's tail, the originally-landed-on tile's effect (e.g. a knight
+    // on the landing tile) is no longer relevant — applying it would
+    // teleport the player off the tail to a knight destination they never
+    // actually landed on.
+    if (result && result.effect && result.effect.type !== 'dragon' && !dragonHandled) {
         await handleTileEffect(currentPlayer, result.effect);
     }
 
@@ -2782,9 +2793,6 @@ async function checkElementalTileEffect(player, startTile) {
         return;
     }
 
-    // Check for Holy Shield protection against elemental effects
-    const shieldProtection = player.inventory.checkPassiveItem('debuff');
-
     const elementEffects = {
         fire: {
             name: 'Fire Zone',
@@ -2812,11 +2820,21 @@ async function checkElementalTileEffect(player, startTile) {
         const effectKey = element === 'poison' ? 'smoke' : element;
         playEffectBurst(effectKey, player.token.x, player.token.y - 15, 3, 40);
 
-        // Check for protection
-        if (shieldProtection && effectData.effect !== 'slip') {
-            gameUI.showToast(`${effectData.name}: ${shieldProtection.name} protects you!`, 'success');
-            playEffectBurst('sparkle', player.token.x, player.token.y - 20, 3, 30);
-            return;
+        // Holy Shield protection against debuffs ONLY — and only for the
+        // effects it actually blocks. Previously checkPassiveItem ran above
+        // unconditionally, which consumed the shield even on slip (where
+        // the shield should not apply). The result was: lose Holy Shield
+        // AND still slip. Now we only consume on a real hit.
+        const isDebuff = effectData.effect === 'burn'
+            || effectData.effect === 'slow'
+            || effectData.effect === 'reverse';
+        if (isDebuff) {
+            const shieldProtection = player.inventory.checkPassiveItem('debuff');
+            if (shieldProtection) {
+                gameUI.showToast(`${effectData.name}: ${shieldProtection.name} protects you!`, 'success');
+                playEffectBurst('sparkle', player.token.x, player.token.y - 20, 3, 30);
+                return;
+            }
         }
 
         // Apply the elemental effect
@@ -2901,7 +2919,9 @@ async function handleTileEffect(player, effect) {
                 console.log(`[Game] Knight boosting player to tile ${destination}`);
                 await player.moveTo(destination, false);
 
-                // Check for cascading knight effects
+                // Check what's at the new tile after the knight teleport.
+                // Could be: another knight (cascade), a dragon (we landed on a
+                // dragon head and previously skipped its check), or nothing.
                 const cascadeEffect = board.checkSpecialTile(player.currentTile);
                 if (cascadeEffect && cascadeEffect.type === 'knight') {
                     console.log('[Game] Cascade knight effect detected!');
@@ -2918,6 +2938,14 @@ async function handleTileEffect(player, effect) {
 
                     // Recursively handle the cascade knight
                     await handleTileEffect(player, cascadeEffect);
+                } else if (cascadeEffect && cascadeEffect.type === 'dragon') {
+                    // Knight teleport dropped us on a dragon head — trigger the
+                    // dragon defense check. Without this branch the dragon was
+                    // silently skipped because checkForEncounters runs with
+                    // skipDragon=true on this turn.
+                    console.log('[Game] Knight teleported onto dragon head — triggering dragon encounter');
+                    await delay(500);
+                    await handleDragonEncounter(player, cascadeEffect.dragon);
                 }
 
                 resolve();
@@ -3314,26 +3342,16 @@ async function applyPortalEffect(player, effect, portal) {
     const goodEffects = ['move', 'loot', 'armor', 'cleanse', 'none', 'buff', 'steal_item', 'double_roll'];
     const isGood = goodEffects.includes(effect.type) && (effect.value === undefined || effect.value > 0);
 
-    // Reginald's Shield Wall - block negative portal effects once per game
-    // Note: Still teleports even when blocked (portals always teleport!)
+    // Reginald's Shield Wall - block negative portal effects once per game.
+    // Per spec ("completely block a negative portal effect"), the player
+    // stays put — no random teleport penalty for using a once-per-game
+    // ability.
     if (!isGood && player.characterData && player.characterData.id === 'reginald' && !player.shieldWallUsed) {
         player.shieldWallUsed = true;
         playEffectBurst('sparkle', player.token.x, player.token.y - 20, 5, 50);
         gameUI.showToast(`🛡️ Shield Wall! ${player.name} blocks the negative effect!`, 'success');
         player.playActionAnimation();
         await delay(800);
-
-        // Still teleport even though effect was blocked (balanced range for fairness)
-        const minOffset = 3, maxOffset = 10;
-        const direction = Math.random() < 0.5 ? 1 : -1;
-        const distance = Math.floor(Math.random() * (maxOffset - minOffset + 1)) + minOffset;
-        const teleportDest = Math.max(1, Math.min(board.totalTiles - 1, player.currentTile + (direction * distance)));
-        if (teleportDest !== player.currentTile) {
-            const dirText = teleportDest > player.currentTile ? 'forward' : 'backward';
-            gameUI.showToast(`Portal warps you ${Math.abs(teleportDest - player.currentTile)} spaces ${dirText}!`, 'info');
-            await player.moveTo(teleportDest, false);
-            updatePlayerStatus();
-        }
         return;
     }
 
@@ -3361,16 +3379,21 @@ async function applyPortalEffect(player, effect, portal) {
             break;
 
         case 'loot':
-            // Gain items
-            for (let i = 0; i < (effect.value || 1); i++) {
-                if (player.inventory.hasSpace()) {
-                    const item = player.inventory.addRandomItem();
-                    if (item && audioManager) {
-                        audioManager.playSFX('sfx_item_get');
+            // Gain items. Aurelia's Royal Tax doubles loot quantity.
+            {
+                const baseCount = effect.value || 1;
+                const isAurelia = player.characterData && player.characterData.id === 'aurelia';
+                const lootCount = isAurelia ? baseCount * 2 : baseCount;
+                for (let i = 0; i < lootCount; i++) {
+                    if (player.inventory.hasSpace()) {
+                        const item = player.inventory.addRandomItem();
+                        if (item && audioManager) {
+                            audioManager.playSFX('sfx_item_get');
+                        }
                     }
                 }
+                updatePlayerStatus();
             }
-            updatePlayerStatus();
             break;
 
         case 'armor':
@@ -3430,8 +3453,10 @@ async function applyPortalEffect(player, effect, portal) {
             break;
 
         case 'lose_all_items':
-            // Lose ALL items
-            while (player.inventory.items.some(slot => slot !== null)) {
+            // Lose ALL items. Inventory.items only ever contains string IDs
+            // (no nulls), so use length directly — the some(!== null) check
+            // worked by accident when items was empty (.some on [] is false).
+            while (player.inventory.items.length > 0) {
                 player.inventory.removeRandomItem();
             }
             updatePlayerStatus();
@@ -3591,13 +3616,23 @@ async function applyEncounterEffect(player, effect) {
             }
             break;
         case 'loot':
-            if (player.inventory.hasSpace()) {
-                const item = player.inventory.addRandomItem();
-                if (item) {
-                    gameUI.showToast(`Found: ${item.name}!`, 'success');
+            // Mimic-success loot. Aurelia's Royal Tax: pull 2 items.
+            {
+                const isAurelia = player.characterData && player.characterData.id === 'aurelia';
+                const lootCount = isAurelia ? 2 : 1;
+                let acquired = 0;
+                for (let i = 0; i < lootCount; i++) {
+                    if (player.inventory.hasSpace()) {
+                        const item = player.inventory.addRandomItem();
+                        if (item) {
+                            acquired += 1;
+                            gameUI.showToast(`Found: ${item.name}!`, 'success');
+                        }
+                    }
                 }
-            } else {
-                gameUI.showToast('Inventory full! Item lost.', 'warning');
+                if (acquired === 0) {
+                    gameUI.showToast('Inventory full! Item lost.', 'warning');
+                }
             }
             break;
         case 'lose_item':
@@ -3617,16 +3652,24 @@ async function handleSpecialTile(player, special) {
 
     switch (special.effect.type) {
         case 'gain_armor':
-            // Rusty Anvil - show encounter modal, then grant armor shard
+            // Rusty Anvil - show encounter modal, then grant N armor shards
+            // (N comes from special.effect.value; inventory capacity may
+            // truncate the haul if slots are full).
             gameState = 'encounter';
             return new Promise((resolve) => {
                 gameUI.showEncounterModal(special, player, async () => {
-                    const added = player.inventory.addItem('armor_shard') ? 1 : 0;
+                    const wanted = special.effect.value || 1;
+                    let added = 0;
+                    for (let i = 0; i < wanted; i++) {
+                        if (player.inventory.addItem('armor_shard')) added++;
+                    }
                     playEffectBurst('fire', player.token.x, player.token.y - 20, 4, 40);
-                    if (added) {
+                    if (added === wanted) {
                         gameUI.showToast(special.effect.message, 'success');
+                    } else if (added > 0) {
+                        gameUI.showToast(`Forged ${added}/${wanted} shards — inventory got full.`, 'warning');
                     } else {
-                        gameUI.showToast('Your inventory is full! No room for the shard.', 'warning');
+                        gameUI.showToast('Your inventory is full! No room for shards.', 'warning');
                     }
                     if (audioManager) {
                         audioManager.playSFX('sfx_encounter_success');

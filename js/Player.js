@@ -51,6 +51,17 @@ class Player {
             burned: false          // -1 to next roll (fire zone)
         };
 
+        // Once-per-game ability flags. game.js consults these via `!flag`,
+        // which previously relied on `undefined` truthiness. Declaring them
+        // explicitly makes the contract obvious and lets reset() restore
+        // them when starting a new game on the same Player instance.
+        this.shieldWallUsed = false;     // Reginald (passive2)
+        this.royalDecreeUsed = false;    // Aurelia (passive2)
+        this.luckyRerollUsed = false;    // Pippin (passive2)
+        this.evasionUsed = false;        // Kaelen (passive2)
+        this.stunImmunityUsed = false;   // Pippin (passive)
+        this.reinforcedUsed = false;     // Grizelda (passive2)
+
         // Inventory system
         this.inventory = new Inventory(3);
 
@@ -324,6 +335,18 @@ class Player {
         this.isMoving = false;
         this.clearStatusEffects();
         this.inventory.clear();
+        // Restore once-per-game ability charges so a re-played game on the
+        // same Player instance behaves like a fresh game.
+        this.shieldWallUsed = false;
+        this.royalDecreeUsed = false;
+        this.luckyRerollUsed = false;
+        this.evasionUsed = false;
+        this.stunImmunityUsed = false;
+        this.reinforcedUsed = false;
+        if (this.characterData && this.characterData.id === 'elara') {
+            this.arcaneInsightUses = this.characterData.passive?.usesRemaining || 2;
+        }
+        this.arcaneInsightBonus = 0;
         this.moveTo(1, true);
         console.log(`[Player ${this.playerNumber}] Reset to start`);
     }

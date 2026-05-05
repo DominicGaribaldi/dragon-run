@@ -482,10 +482,13 @@ describe('EncounterData', () => {
     });
 
     describe('special tiles', () => {
-        it('should have Rusty Anvil at tile 50', () => {
+        it('should have Rusty Anvil at tile 50 granting 3 armor shards', () => {
             const special = EncounterData.special.rustyAnvil;
             expect(special.tile).toBe(50);
             expect(special.effect.type).toBe('gain_armor');
+            // Match GAME_GUIDE.md ("Gain 3 Armor Shards"). Was 1 (silent
+            // doc/code drift) prior to Phase 3.
+            expect(special.effect.value).toBe(3);
         });
 
         it('should have treasure chests at multiple tiles', () => {

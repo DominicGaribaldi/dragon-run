@@ -291,7 +291,7 @@ Players have a **3-slot inventory**. Items are found in treasure chests or from 
 ### Holy Shield (Rare - 15%)
 | Type | Effect |
 |------|--------|
-| Passive | Blocks a Curse or Stun effect (Hypno-Toad, Tax Collector, etc.). |
+| Passive | Blocks one status debuff (stun / slow / reverse) — e.g. Hypno-Toad, Tax Collector, Milk Baby. Does NOT block ice slip. |
 
 ---
 
@@ -313,7 +313,7 @@ Gain **3 Armor Shards** when you land here!
 
 | Status | Effect | Duration |
 |--------|--------|----------|
-| **Slowed** | Movement reduced to 75% | 1 turn |
+| **Slowed** | Movement halved (rounded down, min 1) | 1 turn |
 | **Burned** | -1 to next movement roll | 1 turn |
 | **Stunned** | Skip your next turn | 1-2 turns |
 | **Reversed** | Move BACKWARDS the amount you roll | 1 turn |
@@ -328,7 +328,7 @@ Each dragon has an elemental zone around it. Entering a NEW zone triggers an eff
 |---------|--------|--------|
 | **Fire** | Ignis | Burned (-1 to next roll) |
 | **Ice** | Frost-Fang | Slip (random 1 space forward or back) |
-| **Poison** | Slime-Tooth | Slowed (75% movement next turn) |
+| **Poison** | Slime-Tooth | Slowed (movement halved next turn) |
 
 **Note:** Grizelda is immune to ice slip effects!
 

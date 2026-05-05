@@ -625,8 +625,12 @@ class GameUI {
             this.modalElements.push(armorText);
         }
 
-        // Check if player has smoke bomb for escape option
-        const hasSmokeBomb = player.inventory && player.inventory.hasItem('smoke_bomb') && encounter.tile;
+        // Check if player has smoke bomb for escape option. Smoke bombs only
+        // escape *monster* encounters — gating on encounter.tile alone also
+        // surfaced the button on chests and the anvil, where pressing
+        // "ESCAPE" would silently consume the bomb for no benefit.
+        const hasSmokeBomb = player.inventory && player.inventory.hasItem('smoke_bomb')
+            && encounter.encounterCheck;
 
         // Calculate button positions based on whether we have two buttons
         const rollBtnX = hasSmokeBomb ? cx - 105 : cx;

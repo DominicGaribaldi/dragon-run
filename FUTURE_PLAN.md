@@ -45,11 +45,11 @@ All 6 playable characters with unique dual abilities:
 - Cascade knight support
 
 ### Status Effects
-- Slowed (75% movement)
+- Slowed (movement halved, rounded down, min 1)
 - Burned (-1 roll)
-- Stunned (skip turn)
+- Stunned (skip turn; multi-turn supported via stunDuration)
 - Reversed (move backwards)
-- Holy Shield protection
+- Holy Shield protection (blocks stun / slow / reverse only — does NOT block ice slip)
 
 ### Elemental Zones
 - Fire zones (burn effect)
@@ -104,9 +104,16 @@ All 6 playable characters with unique dual abilities:
 
 ## Board Layout
 - 100 tiles in a snaking path
-- 3 dragons (snakes) at tiles 32, 62, 98
-- 3 knights (ladders) at tiles 9, 45, 80
-- 6 monsters scattered throughout
-- 3 portals (dynamically placed)
-- 5 treasure chests
-- 1 Rusty Anvil at tile 50
+- 3 dragons procedurally placed within zones (Slime-Tooth poison zone,
+  Frost-Fang ice zone, Ignis fire zone). Ignis is fixed at tile 95-98;
+  the other two are randomized per game by Board.js.
+- 3 knights procedurally placed (Hedge / Griffin / King's Champion).
+- 6 monsters at fixed tiles (Milk Baby 14, Tax Goblin 28, Hill-Giant 42,
+  Mimic 53, Hypno-Toad 58, Vampire Family 66).
+- 1-3 portals of each type (Stable / Risky / Chaotic), procedurally placed.
+- 8 treasure chests procedurally placed (was documented as 5).
+- 1 Rusty Anvil at tile 50 (grants 3 Armor Shards).
+
+> Earlier docs claimed fixed positions for everything (dragons at 32/62/98,
+> knights at 9/45/80, 5 chests). The implementation in `js/Board.js` is
+> procedural — those numbers were never the runtime layout.
